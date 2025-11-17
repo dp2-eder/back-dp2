@@ -44,6 +44,13 @@ class SesionMesaResponse(SesionMesaBase):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
+    id_usuario: str = Field(
+        description="ID del usuario asociado a la sesión",
+        min_length=1,
+        max_length=36,
+        alias="id_usuario_creador",
+        serialization_alias="id_usuario"
+    )
     id: str = Field(description="Sesion Mesa ID (ULID)")
     token_sesion: str = Field(description="Token único de la sesión")
     estado: EstadoSesionMesa = Field(description="Estado actual de la sesión")
