@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = '20251110_sesion_pedidos'
+revision: str = '20251110_add_id_sesion_mesa_to_pedidos'
 down_revision: Union[str, None] = '20251110_usuarios_sesiones'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

@@ -19,7 +19,7 @@ class UsuarioBase(BaseModel):
     telefono: Optional[str] = Field(
         default=None, description="Teléfono del usuario", max_length=20
     )
-    id_rol: str = Field(description="ID del rol asignado al usuario")
+    id_rol: Optional[str] = Field(default=None, description="ID del rol asignado al usuario")
 
 
 class UsuarioCreate(UsuarioBase):

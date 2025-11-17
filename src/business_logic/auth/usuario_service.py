@@ -148,11 +148,20 @@ class UsuarioService:
             raise UsuarioValidationError("El email es requerido")
 
         # Validar que el rol existe
-        rol = await self.rol_repository.get_by_id(register_data.id_rol)
-        if not rol:
-            raise UsuarioValidationError(
-                f"El rol con ID '{register_data.id_rol}' no existe"
-            )
+        if register_data.id_rol:
+            rol = await self.rol_repository.get_by_id(register_data.id_rol)
+            if not rol:
+                raise UsuarioValidationError(
+                    f"El rol con ID '{register_data.id_rol}' no existe"
+                )
+        else:
+            # Asignar rol COMENSAL por defecto
+            rol_comensal = await self.rol_repository.get_by_nombre("COMENSAL")
+            if not rol_comensal:
+                raise UsuarioValidationError(
+                    "El rol por defecto 'COMENSAL' no existe en el sistema"
+                )
+            register_data.id_rol = rol_comensal.id
 
         # Verificar si ya existe un usuario con ese email
         existing_usuario = await self.repository.get_by_email(register_data.email)
