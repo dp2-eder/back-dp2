@@ -898,16 +898,18 @@ class PedidoService:
 
             # 8. Commit de la transacción
             await self.session.flush()
-
+            impuestos = created_pedido.impuestos or Decimal("0.00")
+            descuentos = created_pedido.descuentos or Decimal("0.00")
+            total = created_pedido.total or Decimal("0.00")
             # 9. Construir respuesta completa
             pedido_detalle = PedidoHistorialDetalle(
                 id=created_pedido.id,
                 numero_pedido=created_pedido.numero_pedido,
                 estado=created_pedido.estado,
                 subtotal=created_pedido.subtotal,
-                impuestos=created_pedido.impuestos,
-                descuentos=created_pedido.descuentos,
-                total=created_pedido.total,
+                impuestos=impuestos,
+                descuentos=descuentos,
+                total=total,
                 notas_cliente=created_pedido.notas_cliente,
                 notas_cocina=created_pedido.notas_cocina,
                 fecha_creacion=created_pedido.fecha_creacion,
@@ -1008,7 +1010,8 @@ class PedidoService:
                         opciones=opciones_detalle,
                     )
                 )
-
+            impuestos = pedido.impuestos or Decimal("0.00")
+            descuentos = pedido.descuentos or Decimal("0.00")
             # Construir el pedido detallado
             pedidos_detalle.append(
                 PedidoHistorialDetalle(
@@ -1016,8 +1019,8 @@ class PedidoService:
                     numero_pedido=pedido.numero_pedido,
                     estado=pedido.estado,
                     subtotal=pedido.subtotal,
-                    impuestos=pedido.impuestos,
-                    descuentos=pedido.descuentos,
+                    impuestos=impuestos,
+                    descuentos=descuentos,
                     total=pedido.total,
                     notas_cliente=pedido.notas_cliente,
                     notas_cocina=pedido.notas_cocina,

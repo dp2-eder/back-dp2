@@ -439,7 +439,7 @@ class SesionMesaRepository:
             # Contar total antes de aplicar paginación
             count_stmt = select(func.count()).select_from(stmt.alias())
             total_result = await self.session.execute(count_stmt)
-            total = total_result.scalar()
+            total = total_result.scalar() or 0
 
             # Aplicar ordenamiento y paginación
             stmt = (

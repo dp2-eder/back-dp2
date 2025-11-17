@@ -2,7 +2,7 @@
 Endpoints para gestión de relaciones Local-Producto.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
@@ -37,7 +37,7 @@ router = APIRouter(prefix="/locales/{id_local}/productos", tags=["Local - Produc
 )
 async def create_relacion(
     id_local: str = Path(..., description="ID del local"),
-    relacion_data: LocalesProductosCreate = ...,
+    relacion_data: LocalesProductosCreate = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesProductosResponse:
     """
@@ -174,7 +174,7 @@ async def get_relacion(
 async def update_relacion(
     id_local: str = Path(..., description="ID del local"),
     relacion_id: str = Path(..., description="ID de la relación"),
-    relacion_data: LocalesProductosUpdate = ...,
+    relacion_data: LocalesProductosUpdate = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesProductosResponse:
     """
@@ -254,7 +254,7 @@ async def delete_relacion(
 )
 async def activar_producto(
     id_local: str = Path(..., description="ID del local"),
-    request: ActivarProductoRequest = ...,
+    request: ActivarProductoRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesProductosResponse:
     """
@@ -296,7 +296,7 @@ async def activar_producto(
 )
 async def desactivar_producto(
     id_local: str = Path(..., description="ID del local"),
-    request: DesactivarProductoRequest = ...,
+    request: DesactivarProductoRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesProductosResponse:
     """
@@ -336,7 +336,7 @@ async def desactivar_producto(
 )
 async def actualizar_overrides(
     id_local: str = Path(..., description="ID del local"),
-    request: ActualizarOverridesRequest = ...,
+    request: ActualizarOverridesRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesProductosResponse:
     """
@@ -376,7 +376,7 @@ async def actualizar_overrides(
 )
 async def activar_productos_lote(
     id_local: str = Path(..., description="ID del local"),
-    request: ActivarProductosLoteRequest = ...,
+    request: ActivarProductosLoteRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> OperacionLoteResponse:
     """

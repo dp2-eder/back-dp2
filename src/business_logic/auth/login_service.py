@@ -104,6 +104,9 @@ class LoginService:
                 # Nombre coincide: solo actualizar ultimo_acceso
                 usuario = await self.usuario_repository.update_ultimo_acceso(usuario.id)
 
+        if usuario is None or usuario.id is None:
+            raise ValueError("No se pudo crear o recuperar un usuario válido.")
+
         # Buscar sesión activa de la mesa (sin importar el usuario)
         sesion_mesa = await self.sesion_mesa_repository.get_active_by_mesa(id_mesa)
 
