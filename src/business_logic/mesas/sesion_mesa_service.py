@@ -17,6 +17,7 @@ from src.api.schemas.sesion_mesa_schema import (
     SesionMesaResponse,
     SesionMesaSummary,
     SesionMesaUpdate,
+    SesionMesaListResponse,
 )
 from src.business_logic.exceptions.sesion_mesa_exceptions import (
     SesionMesaNotFoundError,
@@ -392,6 +393,40 @@ class SesionMesaService:
 
         return SesionMesaResponse.model_validate(sesion_cerrada)
 
+    async def cerrar_sesion_por_token(self, token_sesion: str) -> SesionMesaResponse:
+        """
+        Cierra una sesión de mesa usando el token compartido.
+
+        Este método permite cerrar una sesión usando el token que tienen los clientes,
+        sin necesidad de conocer el ID interno de la sesión.
+
+        Parameters
+        ----------
+        token_sesion : str
+            Token de la sesión a cerrar.
+
+        Returns
+        -------
+        SesionMesaResponse
+            La sesión de mesa cerrada.
+
+        Raises
+        ------
+        SesionMesaNotFoundError
+            Si la sesión no existe.
+        SesionMesaValidationError
+            Si la sesión ya está cerrada.
+        """
+        # Buscar sesión por token
+        sesion = await self.repository.get_by_token(token_sesion)
+        if not sesion:
+            raise SesionMesaNotFoundError(
+                f"No se encontró la sesión de mesa con token '{token_sesion}'"
+            )
+
+        # Reutilizar el método de cierre existente por ID
+        return await self.cerrar_sesion(sesion.id)
+
     async def delete_sesion_mesa(self, sesion_id: str) -> None:
         """
         Elimina una sesión de mesa del sistema.
@@ -415,3 +450,52 @@ class SesionMesaService:
 
         # Eliminar la sesión usando el repositorio
         await self.repository.delete(sesion_id)
+
+    async def get_sesiones_list(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        id_mesa: Optional[str] = None,
+        estado: Optional[EstadoSesionMesa] = None,
+    ) -> SesionMesaListResponse:
+        """
+        Obtiene una lista paginada de sesiones de mesa con filtros opcionales.
+
+        Parameters
+        ----------
+        skip : int, optional
+            Número de registros a omitir (offset), por defecto 0.
+        limit : int, optional
+            Número máximo de registros a retornar, por defecto 100.
+        id_mesa : Optional[str], optional
+            Filtrar por ID de mesa específica.
+        estado : Optional[EstadoSesionMesa], optional
+            Filtrar por estado de la sesión (activa, inactiva, cerrada, finalizada).
+
+        Returns
+        -------
+        SesionMesaListResponse
+            Lista paginada de sesiones de mesa con metadatos.
+        """
+        # Obtener sesiones con filtros
+        sesiones, total = await self.repository.get_all(
+            skip=skip,
+            limit=limit,
+            id_mesa=id_mesa,
+            estado=estado
+        )
+
+        # Convertir a schemas de respuesta
+        sesiones_response = [
+            SesionMesaResponse.model_validate(sesion) for sesion in sesiones
+        ]
+
+        # Calcular página actual
+        page = (skip // limit) + 1 if limit > 0 else 1
+
+        return SesionMesaListResponse(
+            total=total,
+            page=page,
+            limit=limit,
+            sesiones=sesiones_response
+        )

@@ -232,6 +232,14 @@ class PedidoHistorialResponse(BaseModel):
 
     token_sesion: str = Field(description="Token de sesión de mesa")
     id_mesa: str = Field(description="ID de la mesa")
+    estado_sesion: Optional[str] = Field(
+        default="activa",
+        description="Estado actual de la sesión"
+    )
+    mensaje: Optional[str] = Field(
+        default=None,
+        description="Mensaje informativo sobre el estado de la sesión"
+    )
     total_pedidos: int = Field(description="Total de pedidos en la sesión")
     pedidos: List[PedidoHistorialDetalle] = Field(description="Lista de pedidos")
 
