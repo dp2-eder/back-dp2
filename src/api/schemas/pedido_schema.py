@@ -184,8 +184,8 @@ class PedidoResponse(PedidoBase):
     )
 
     # Items field (optional, populated when needed)
-    items: Optional[List[PedidoItemResponse]] = Field(
-        default=None, description="List of items in the pedido"
+    items: List[PedidoItemResponse] = Field(
+        default_factory=list, description="List of items in the pedido"
     )
 
 
@@ -294,7 +294,9 @@ class PedidoProductoWithOpcionesResponse(BaseModel):
 class PedidoCompletoResponse(PedidoResponse):
     """Schema for complete order response with items and their options."""
 
-    items: List[PedidoItemResponse] = Field(description="Order items with options")
+    items: List[PedidoItemResponse] = Field(
+        default_factory=list, description="Order items with options"
+    )
 
 # Import for type hint in PedidoCompletoResponse
 from src.api.schemas.pedido_producto_schema import PedidoProductoResponse
