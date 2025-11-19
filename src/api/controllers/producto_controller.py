@@ -3,7 +3,7 @@ Endpoints para gestión de productos.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
@@ -493,3 +493,80 @@ async def update_producto_completo(
             detail=f"Error interno del servidor: {str(e)}",
         )
 
+
+
+@router.put(
+    "/{producto_id}/imagen",
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar imagen de producto",
+    description="Sube/actualiza la imagen de un producto. Reemplaza imagen existente si la hay.",
+)
+async def update_producto_imagen(
+    producto_id: str,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_database_session),
+):
+    """Actualiza la imagen de un producto."""
+    from pathlib import Path
+    import aiofiles
+    from ulid import ULID
+    import os
+    from src.core.storage_config import (
+        PRODUCTOS_IMAGES_DIR,
+        ALLOWED_IMAGE_EXTENSIONS,
+        MAX_IMAGE_SIZE
+    )
+
+    try:
+        producto_service = ProductoService(session)
+        producto_actual = await producto_service.get_producto_by_id(producto_id)
+
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El archivo no tiene un nombre válido"
+            )
+
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in ALLOWED_IMAGE_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tipo de archivo no permitido. Use: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
+            )
+
+        contents = await file.read()
+        if len(contents) > MAX_IMAGE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Archivo muy grande. Máximo: {MAX_IMAGE_SIZE / 1024 / 1024}MB"
+            )
+
+        nuevo_filename = f"{str(ULID())}{file_ext}"
+        nuevo_file_path = PRODUCTOS_IMAGES_DIR / nuevo_filename
+
+        async with aiofiles.open(nuevo_file_path, "wb") as f:
+            await f.write(contents)
+
+        imagen_antigua = producto_actual.imagen_path
+        if imagen_antigua and imagen_antigua.startswith("/static/"):
+            archivo_antiguo_path = Path(imagen_antigua.lstrip("/"))
+            if archivo_antiguo_path.exists():
+                try:
+                    os.remove(archivo_antiguo_path)
+                except Exception as e:
+                    print(f"Warning: No se pudo eliminar imagen antigua: {e}")
+
+        nueva_ruta = f"/static/images/productos/{nuevo_filename}"
+        await producto_service.repository.update(producto_id, imagen_path=nueva_ruta)
+
+        return {"imagen_path": nueva_ruta, "mensaje": "Imagen actualizada correctamente"}
+
+    except ProductoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al actualizar imagen: {str(e)}"
+        )
