@@ -103,6 +103,13 @@ class LoginRequest(BaseModel):
     password: str = Field(description="Contraseña del usuario", min_length=1)
 
 
+class AdminLoginRequest(BaseModel):
+    """Schema para solicitud de login de administrador."""
+
+    usuario: str = Field(description="Usuario (email) del administrador", min_length=1)
+    password: str = Field(description="Contraseña del administrador", min_length=1)
+
+
 class LoginResponse(BaseModel):
     """Schema para respuesta de login."""
 

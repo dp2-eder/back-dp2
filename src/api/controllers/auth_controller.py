@@ -13,6 +13,7 @@ from src.core.security import security
 from src.api.schemas.usuario_schema import (
     LoginRequest,
     LoginResponse,
+    AdminLoginRequest,
     RegisterRequest,
     RegisterResponse,
     RefreshTokenRequest,
@@ -177,6 +178,75 @@ async def login(
     try:
         usuario_service = UsuarioService(session)
         result = await usuario_service.login(login_data)
+        await session.commit()
+        return result
+    except InvalidCredentialsError as e:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "status": 401,
+                "code": "INVALID_CREDENTIALS",
+                "detail": str(e)
+            },
+        )
+    except InactiveUserError as e:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "status": 401,
+                "code": "INACTIVE_USER",
+                "detail": str(e)
+            },
+        )
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": 500,
+                "code": "INTERNAL_ERROR",
+                "detail": f"Error inesperado: {str(e)}"
+            },
+        )
+
+
+@router.post(
+    "/admin/login",
+    response_model=LoginResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Iniciar sesión de administrador",
+    description="Autentica un administrador con usuario (email) y contraseña, devuelve tokens JWT.",
+)
+async def admin_login(
+    login_data: AdminLoginRequest,
+    session: AsyncSession = Depends(get_database_session),
+) -> LoginResponse:
+    """
+    Endpoint para iniciar sesión de administrador.
+
+    Parameters
+    ----------
+    login_data : AdminLoginRequest
+        Datos de login (usuario/email y contraseña).
+    session : AsyncSession
+        Sesión de base de datos.
+
+    Returns
+    -------
+    LoginResponse
+        Tokens de acceso y refresh junto con información del usuario administrador.
+
+    Raises
+    ------
+    HTTPException
+        401 si las credenciales son inválidas, el usuario no es administrador o está inactivo.
+        500 si ocurre un error inesperado.
+    """
+    try:
+        usuario_service = UsuarioService(session)
+        result = await usuario_service.admin_login(login_data)
         await session.commit()
         return result
     except InvalidCredentialsError as e:
