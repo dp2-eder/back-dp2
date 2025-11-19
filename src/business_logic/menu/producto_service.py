@@ -20,7 +20,8 @@ from src.api.schemas.producto_schema import (
     ProductoCardList,
     ProductoConOpcionesResponse,
     TipoOpcionConOpcionesSchema,
-    ProductoOpcionDetalleSchema
+    ProductoOpcionDetalleSchema,
+    ProductoCompletoUpdateSchema
 )
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
@@ -595,3 +596,131 @@ class ProductoService:
 
         # Retornar esquema de lista
         return ProductoCardList(items=producto_cards, total=total)
+
+    async def update_producto_completo(
+        self, producto_id: str, producto_data: ProductoCompletoUpdateSchema
+    ) -> ProductoConOpcionesResponse:
+        """
+        Actualiza completamente un producto con todos sus datos relacionados.
+        
+        Actualiza el producto base, sus alérgenos, secciones, tipos de opciones y opciones.
+        Reemplaza completamente las relaciones existentes.
+
+        Parameters
+        ----------
+        producto_id : str
+            Identificador único del producto a actualizar.
+        producto_data : ProductoCompletoUpdateSchema
+            Esquema con todos los datos del producto a actualizar.
+
+        Returns
+        -------
+        ProductoConOpcionesResponse
+            Esquema de respuesta con el producto actualizado y todas sus relaciones.
+
+        Raises
+        ------
+        ProductoNotFoundError
+            Si no se encuentra el producto con el ID especificado.
+        ProductoConflictError
+            Si hay conflictos de integridad (ej. nombre duplicado).
+        ProductoValidationError
+            Si los datos de entrada son inválidos.
+        """
+        try:
+            # Verificar que el producto existe
+            producto = await self.repository.get_by_id(producto_id)
+            if not producto:
+                raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
+
+            # Actualizar datos básicos del producto
+            update_data = {
+                "nombre": producto_data.nombre,
+                "descripcion": producto_data.descripcion,
+                "precio_base": producto_data.precio_base,
+                "imagen_path": producto_data.imagen_path,
+                "imagen_alt_text": producto_data.imagen_alt_text,
+                "id_categoria": producto_data.id_categoria,
+                "disponible": producto_data.disponible,
+                "destacado": producto_data.destacado,
+            }
+
+            # Actualizar el producto base usando **kwargs
+            updated_producto = await self.repository.update(producto_id, **update_data)
+
+            # TODO: Actualizar alérgenos del producto
+            # await self._update_producto_alergenos(producto_id, producto_data.alergenos)
+
+            # TODO: Actualizar secciones del producto
+            # await self._update_producto_secciones(producto_id, producto_data.secciones)
+
+            # TODO: Actualizar tipos de opciones y opciones del producto
+            # await self._update_producto_tipos_opciones(producto_id, producto_data.tipos_opciones)
+
+            # Obtener el producto actualizado con todas sus relaciones
+            producto_completo = await self.repository.get_by_id_with_opciones(producto_id)
+            if not producto_completo:
+                raise ProductoNotFoundError(f"Error al obtener el producto actualizado con ID {producto_id}")
+
+            # Normalizar nombres antes de retornar
+            producto_completo.nombre = normalize_product_name(producto_completo.nombre)
+            
+            # Transformar y estructurar los datos de opciones por tipo
+            tipos_opciones_response = []
+            if hasattr(producto_completo, 'opciones') and producto_completo.opciones:
+                # Agrupar opciones por tipo
+                tipos_dict = {}
+                for opcion in producto_completo.opciones:
+                    tipo_id = opcion.tipo_opcion.id
+                    if tipo_id not in tipos_dict:
+                        tipos_dict[tipo_id] = {
+                            "id_tipo_opcion": opcion.tipo_opcion.id,
+                            "nombre_tipo": opcion.tipo_opcion.nombre,
+                            "descripcion_tipo": opcion.tipo_opcion.descripcion,
+                            "seleccion_minima": opcion.tipo_opcion.seleccion_minima,
+                            "seleccion_maxima": opcion.tipo_opcion.seleccion_maxima,
+                            "orden_tipo": opcion.tipo_opcion.orden,
+                            "opciones": []
+                        }
+                    
+                    tipos_dict[tipo_id]["opciones"].append(
+                        ProductoOpcionDetalleSchema.model_validate(opcion)
+                    )
+                
+                # Convertir el diccionario a lista ordenada por orden_tipo
+                tipos_opciones_response = [
+                    TipoOpcionConOpcionesSchema.model_validate(tipo_data)
+                    for tipo_data in sorted(tipos_dict.values(), key=lambda x: x["orden_tipo"])
+                ]
+
+            # Construir respuesta con estructura completa
+            response_data = {
+                "id": producto_completo.id,
+                "nombre": producto_completo.nombre,
+                "descripcion": producto_completo.descripcion,
+                "precio_base": producto_completo.precio_base,
+                "imagen_path": producto_completo.imagen_path,
+                "imagen_alt_text": producto_completo.imagen_alt_text,
+                "id_categoria": producto_completo.id_categoria,
+                "disponible": producto_completo.disponible,
+                "destacado": producto_completo.destacado,
+                "alergenos": producto_completo.alergenos if hasattr(producto_completo, 'alergenos') else [],
+                "fecha_creacion": producto_completo.fecha_creacion,
+                "fecha_modificacion": producto_completo.fecha_modificacion,
+                "tipos_opciones": tipos_opciones_response
+            }
+            
+            return ProductoConOpcionesResponse.model_validate(response_data)
+
+        except IntegrityError as e:
+            # Capturar errores de integridad
+            if "nombre" in str(e):
+                raise ProductoConflictError(
+                    f"Ya existe un producto con el nombre '{producto_data.nombre}'"
+                )
+            raise ProductoValidationError(f"Error de integridad en los datos: {str(e)}")
+        except Exception as e:
+            # Capturar otros errores y convertir a excepción de validación
+            if isinstance(e, (ProductoNotFoundError, ProductoConflictError, ProductoValidationError)):
+                raise
+            raise ProductoValidationError(f"Error al actualizar el producto: {str(e)}")

@@ -202,3 +202,58 @@ from src.api.schemas.producto_opcion_schema import ProductoOpcionResponse  # noq
 # Actualizar forward references
 ProductoConOpcionesResponse.model_rebuild()
 
+
+class ProductoOpcionCompletoSchema(BaseModel):
+    """Schema para opciones de producto en actualización masiva."""
+    
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
+    
+    id_opcion: str = Field(description="ID de la opción")
+    nombre: str = Field(description="Nombre de la opción", min_length=1, max_length=255)
+    precio_adicional: Decimal = Field(description="Precio adicional", ge=0)
+    activo: bool = Field(description="Si la opción está activa")
+    orden: int = Field(description="Orden de visualización", ge=0)
+
+
+class TipoOpcionCompletoSchema(BaseModel):
+    """Schema para tipos de opción en actualización masiva."""
+    
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
+    
+    id_tipo_opcion: str = Field(description="ID del tipo de opción")
+    nombre: str = Field(description="Nombre del tipo", min_length=1, max_length=255)
+    descripcion: Optional[str] = Field(default=None, description="Descripción del tipo")
+    seleccion_minima: int = Field(description="Selección mínima", ge=0)
+    seleccion_maxima: Optional[int] = Field(default=None, description="Selección máxima", ge=1)
+    orden: int = Field(description="Orden de visualización", ge=0)
+    opciones: List[ProductoOpcionCompletoSchema] = Field(description="Lista de opciones")
+
+
+class SeccionProductoSchema(BaseModel):
+    """Schema para secciones de producto en actualización masiva."""
+    
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
+    
+    id_seccion: str = Field(description="ID de la sección")
+
+
+class ProductoCompletoUpdateSchema(BaseModel):
+    """Schema para actualización masiva de producto con todos sus datos."""
+    
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
+    
+    # Datos básicos del producto
+    nombre: str = Field(description="Nombre del producto", min_length=1, max_length=255)
+    descripcion: Optional[str] = Field(default=None, description="Descripción del producto")
+    precio_base: Decimal = Field(description="Precio base", gt=0)
+    imagen_path: Optional[str] = Field(default=None, description="Ruta imagen", max_length=255)
+    imagen_alt_text: Optional[str] = Field(default=None, description="Texto alt imagen", max_length=255)
+    id_categoria: str = Field(description="ID de la categoría")
+    disponible: bool = Field(description="Si el producto está disponible")
+    destacado: bool = Field(description="Si el producto está destacado")
+    
+    # Relaciones
+    alergenos: List[str] = Field(description="Lista de IDs de alérgenos")
+    secciones: List[SeccionProductoSchema] = Field(description="Lista de secciones del producto") 
+    tipos_opciones: List[TipoOpcionCompletoSchema] = Field(description="Lista de tipos de opciones")
+

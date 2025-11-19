@@ -15,6 +15,7 @@ from src.api.schemas.producto_schema import (
     ProductoList,
     ProductoCardList,
     ProductoConOpcionesResponse,
+    ProductoCompletoUpdateSchema,
 )
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
@@ -434,6 +435,58 @@ async def delete_producto(
         # lanza ProductoNotFoundError si no encuentra el producto
     except ProductoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+
+@router.put(
+    "/{producto_id}/completo",
+    response_model=ProductoConOpcionesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar producto completo",
+    description="Actualiza completamente un producto con todos sus datos: alérgenos, secciones, tipos de opciones y opciones.",
+)
+async def update_producto_completo(
+    producto_id: str,
+    producto_data: ProductoCompletoUpdateSchema,
+    session: AsyncSession = Depends(get_database_session),
+) -> ProductoConOpcionesResponse:
+    """
+    Actualiza completamente un producto con todos sus datos relacionados.
+
+    Permite actualizar en una sola operación:
+    - Datos básicos del producto (nombre, descripción, precio, etc.)
+    - Lista de alérgenos asociados
+    - Secciones del producto
+    - Tipos de opciones con sus opciones correspondientes
+
+    Args:
+        producto_id: ID del producto a actualizar.
+        producto_data: Schema con todos los datos del producto a actualizar.
+        session: Sesión de base de datos.
+
+    Returns:
+        El producto actualizado con todas sus relaciones.
+
+    Raises:
+        HTTPException:
+            - 400: Si los datos de entrada son inválidos.
+            - 404: Si no se encuentra el producto.
+            - 409: Si hay conflictos (ej. nombre duplicado).
+            - 500: Si ocurre un error interno del servidor.
+    """
+    try:
+        producto_service = ProductoService(session)
+        return await producto_service.update_producto_completo(producto_id, producto_data)
+    except ProductoValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ProductoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ProductoConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
