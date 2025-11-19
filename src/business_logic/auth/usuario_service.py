@@ -18,6 +18,7 @@ from src.api.schemas.usuario_schema import (
     UsuarioSummary,
     LoginRequest,
     LoginResponse,
+    AdminLoginRequest,
     RegisterRequest,
     RegisterResponse,
     RefreshTokenRequest,
@@ -96,6 +97,85 @@ class UsuarioService:
 
         # if not security.verify_password(login_data.password, usuario.password_hash):
         #     raise InvalidCredentialsError("Email o contraseña incorrectos")
+
+        # Actualizar último acceso
+        await self.repository.update_ultimo_acceso(usuario.id)
+
+        # Generar tokens
+        token_data = {
+            "sub": usuario.id,
+            "email": usuario.email,
+        }
+
+        access_token = security.create_access_token(token_data)
+        refresh_token = security.create_refresh_token(token_data)
+
+        # Construir respuesta
+        usuario_response = UsuarioResponse.model_validate(usuario)
+
+        return LoginResponse(
+            status=200,
+            code="SUCCESS",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            usuario=usuario_response,
+        )
+
+    async def admin_login(self, login_data: AdminLoginRequest) -> LoginResponse:
+        """
+        Autentica un administrador y genera tokens JWT.
+
+        Parameters
+        ----------
+        login_data : AdminLoginRequest
+            Datos de login (usuario/email y contraseña).
+
+        Returns
+        -------
+        LoginResponse
+            Tokens de acceso y refresh junto con información del usuario.
+
+        Raises
+        ------
+        InvalidCredentialsError
+            Si las credenciales son inválidas o el usuario no es administrador.
+        InactiveUserError
+            Si el usuario está inactivo.
+        """
+        # Buscar usuario por email (el campo "usuario" se usa como email)
+        usuario = await self.repository.get_by_email(login_data.usuario)
+
+        if not usuario:
+            raise InvalidCredentialsError("Usuario o contraseña incorrectos")
+
+        # Verificar si el usuario está activo
+        if not usuario.activo:
+            raise InactiveUserError("El usuario está inactivo. Contacte al administrador.")
+
+        # Verificar contraseña
+        # Obtener password_hash del modelo (puede estar en atributos dinámicos)
+        password_hash = getattr(usuario, 'password_hash', None)
+        if not password_hash:
+            raise InvalidCredentialsError("Usuario o contraseña incorrectos")
+
+        if not security.verify_password(login_data.password, password_hash):
+            raise InvalidCredentialsError("Usuario o contraseña incorrectos")
+
+        # Verificar que el usuario tenga rol de administrador
+        if not usuario.id_rol:
+            raise InvalidCredentialsError("El usuario no tiene un rol asignado")
+
+        # Obtener el rol del usuario
+        rol = await self.rol_repository.get_by_id(usuario.id_rol)
+        if not rol:
+            raise InvalidCredentialsError("El rol del usuario no existe")
+
+        # Verificar que el rol sea de administrador
+        # Buscar roles de administrador (puede ser "ADMIN", "ADMINISTRADOR", etc.)
+        rol_nombre_upper = rol.nombre.upper()
+        if rol_nombre_upper not in ["ADMIN", "ADMINISTRADOR"]:
+            raise InvalidCredentialsError("Acceso denegado. Se requiere rol de administrador.")
 
         # Actualizar último acceso
         await self.repository.update_ultimo_acceso(usuario.id)
