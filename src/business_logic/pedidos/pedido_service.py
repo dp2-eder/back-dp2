@@ -758,9 +758,17 @@ class PedidoService:
                 raise PedidoValidationError(
                     f"No se encontró una sesión con el token {pedido_data.token_sesion}"
                 )
+
+            # Validar que el estado sea ACTIVA
             if sesion.estado != EstadoSesionMesa.ACTIVA:
                 raise PedidoValidationError(
-                    f"La sesión de mesa no está activa. Estado actual: {sesion.estado.value}"
+                    "La sesión de mesa no está activa. No se pueden crear pedidos."
+                )
+
+            # Validar que no esté expirada por tiempo
+            if sesion.esta_expirada():
+                raise PedidoValidationError(
+                    "La sesión ha expirado. Por favor, solicite una nueva sesión en el login."
                 )
 
             # 2. Validar que la mesa existe (aunque debería existir si hay sesión)
@@ -898,16 +906,18 @@ class PedidoService:
 
             # 8. Commit de la transacción
             await self.session.flush()
-
+            impuestos = created_pedido.impuestos or Decimal("0.00")
+            descuentos = created_pedido.descuentos or Decimal("0.00")
+            total = created_pedido.total or Decimal("0.00")
             # 9. Construir respuesta completa
             pedido_detalle = PedidoHistorialDetalle(
                 id=created_pedido.id,
                 numero_pedido=created_pedido.numero_pedido,
                 estado=created_pedido.estado,
                 subtotal=created_pedido.subtotal,
-                impuestos=created_pedido.impuestos,
-                descuentos=created_pedido.descuentos,
-                total=created_pedido.total,
+                impuestos=impuestos,
+                descuentos=descuentos,
+                total=total,
                 notas_cliente=created_pedido.notas_cliente,
                 notas_cocina=created_pedido.notas_cocina,
                 fecha_creacion=created_pedido.fecha_creacion,
@@ -961,6 +971,22 @@ class PedidoService:
                 f"No se encontró una sesión con el token {token_sesion}"
             )
 
+        # Validar si la sesión está cerrada o expirada
+        sesion_cerrada = (
+            sesion.estado != EstadoSesionMesa.ACTIVA or sesion.esta_expirada()
+        )
+
+        if sesion_cerrada:
+            # Retornar respuesta con lista vacía y mensaje
+            return PedidoHistorialResponse(
+                token_sesion=token_sesion,
+                id_mesa=sesion.id_mesa,
+                estado_sesion=sesion.estado.value,
+                mensaje="Esta sesión ha sido cerrada o ha expirado. No hay pedidos disponibles.",
+                total_pedidos=0,
+                pedidos=[]
+            )
+
         # 2. Obtener todos los pedidos de esta sesión (detallado)
         pedidos, total = await self.repository.get_all_detallado(
             skip=0,
@@ -1008,7 +1034,8 @@ class PedidoService:
                         opciones=opciones_detalle,
                     )
                 )
-
+            impuestos = pedido.impuestos or Decimal("0.00")
+            descuentos = pedido.descuentos or Decimal("0.00")
             # Construir el pedido detallado
             pedidos_detalle.append(
                 PedidoHistorialDetalle(
@@ -1016,8 +1043,8 @@ class PedidoService:
                     numero_pedido=pedido.numero_pedido,
                     estado=pedido.estado,
                     subtotal=pedido.subtotal,
-                    impuestos=pedido.impuestos,
-                    descuentos=pedido.descuentos,
+                    impuestos=impuestos,
+                    descuentos=descuentos,
                     total=pedido.total,
                     notas_cliente=pedido.notas_cliente,
                     notas_cocina=pedido.notas_cocina,
@@ -1034,6 +1061,8 @@ class PedidoService:
         return PedidoHistorialResponse(
             token_sesion=token_sesion,
             id_mesa=sesion.id_mesa,
+            estado_sesion=sesion.estado.value,
+            mensaje=None,  # None si la sesión está activa
             total_pedidos=total,
             pedidos=pedidos_detalle,
         )
