@@ -37,9 +37,9 @@ def test_producto_opcion_creation():
     POSTCONDICIONES:
         - La instancia debe tener los valores exactos proporcionados.
     """
-    opcion_id: UUID = str(ULID())
-    producto_id: UUID = str(ULID())
-    tipo_opcion_id: UUID = str(ULID())
+    opcion_id= str(ULID())
+    producto_id= str(ULID())
+    tipo_opcion_id= str(ULID())
     opcion_nombre = "Ají suave"
     precio_adicional = Decimal("2.50")
 
@@ -78,9 +78,9 @@ def test_producto_opcion_to_dict():
         - El diccionario debe contener todas las claves esperadas.
         - Los valores deben coincidir con los de la instancia original.
     """
-    opcion_id: UUID = str(ULID())
-    producto_id: UUID = str(ULID())
-    tipo_opcion_id: UUID = str(ULID())
+    opcion_id= str(ULID())
+    producto_id= str(ULID())
+    tipo_opcion_id= str(ULID())
     opcion_nombre = "Sin ají"
     
     opcion = ProductoOpcionModel(
@@ -121,9 +121,9 @@ def test_producto_opcion_defaults():
     POSTCONDICIONES:
         - Los atributos con valores predeterminados deben tener los valores esperados.
     """
-    producto_id: UUID = str(ULID())
-    tipo_opcion_id: UUID = str(ULID())
-    
+    producto_id= str(ULID())
+    tipo_opcion_id= str(ULID())
+
     opcion = ProductoOpcionModel(
         id_producto=producto_id,
         id_tipo_opcion=tipo_opcion_id,
@@ -150,9 +150,9 @@ def test_producto_opcion_precio_decimal():
     POSTCONDICIONES:
         - El precio debe mantener exactamente 2 decimales.
     """
-    producto_id: UUID = str(ULID())
-    tipo_opcion_id: UUID = str(ULID())
-    
+    producto_id= str(ULID())
+    tipo_opcion_id= str(ULID())
+
     opcion = ProductoOpcionModel(
         id_producto=producto_id,
         id_tipo_opcion=tipo_opcion_id,
@@ -178,10 +178,10 @@ def test_producto_opcion_repr():
     POSTCONDICIONES:
         - Debe retornar una representación en string legible.
     """
-    producto_id: UUID = str(ULID())
-    tipo_opcion_id: UUID = str(ULID())
-    opcion_id: UUID = str(ULID())
-    
+    producto_id= str(ULID())
+    tipo_opcion_id= str(ULID())
+    opcion_id= str(ULID())
+
     opcion = ProductoOpcionModel(
         id=opcion_id,
         id_producto=producto_id,

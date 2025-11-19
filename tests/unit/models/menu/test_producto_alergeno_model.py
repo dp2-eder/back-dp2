@@ -26,6 +26,7 @@ def test_producto_alergeno_model_creation():
 
     POSTCONDICIONES:
         - La instancia debe tener los valores exactos proporcionados.
+        - El ID debe generarse automáticamente (ULID).
     """
     producto_id: str = str(ULID())
     alergeno_id: str = str(ULID())
@@ -39,6 +40,8 @@ def test_producto_alergeno_model_creation():
         notas=notas
     )
 
+    assert producto_alergeno.id is not None  # ID auto-generado
+    assert len(producto_alergeno.id) == 26  # ULID tiene 26 caracteres
     assert producto_alergeno.id_producto == producto_id
     assert producto_alergeno.id_alergeno == alergeno_id
     assert producto_alergeno.nivel_presencia == nivel

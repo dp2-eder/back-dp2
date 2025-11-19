@@ -2,7 +2,6 @@
 Endpoints para gestión de relaciones producto-alérgeno.
 """
 
-from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,7 +35,7 @@ async def create_producto_alergeno(
 ) -> ProductoAlergenoResponse:
     """
     Crea una nueva relación producto-alérgeno en el sistema.
-    
+
     Args:
         producto_alergeno_data: Datos de la relación producto-alérgeno a crear.
         session: Sesión de base de datos.
@@ -69,8 +68,8 @@ async def create_producto_alergeno(
     description="Obtiene los detalles de una relación producto-alérgeno específica por sus IDs.",
 )
 async def get_producto_alergeno(
-    id_producto: UUID,
-    id_alergeno: UUID,
+    id_producto: str,
+    id_alergeno: str,
     session: AsyncSession = Depends(get_database_session)
 ) -> ProductoAlergenoResponse:
     """
@@ -91,7 +90,7 @@ async def get_producto_alergeno(
     """
     try:
         producto_alergeno_service = ProductoAlergenoService(session)
-        return await producto_alergeno_service.get_producto_alergeno_by_id(id_producto, id_alergeno)
+        return await producto_alergeno_service.get_producto_alergeno_by_combination(id_producto, id_alergeno)
     except ProductoAlergenoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -117,7 +116,7 @@ async def list_producto_alergenos(
 ) -> ProductoAlergenoList:
     """
     Obtiene una lista paginada de relaciones producto-alérgeno.
-    
+
     Args:
         skip: Número de registros a omitir (offset), por defecto 0.
         limit: Número máximo de registros a retornar, por defecto 100.
@@ -151,10 +150,10 @@ async def list_producto_alergenos(
     description="Actualiza los datos de una relación producto-alérgeno existente.",
 )
 async def update_producto_alergeno(
-    id_producto: UUID,
-    id_alergeno: UUID,
+    id_producto: str,
+    id_alergeno: str,
     producto_alergeno_data: ProductoAlergenoUpdate,
-    session: AsyncSession = Depends(get_database_session),
+    session: AsyncSession = Depends(get_database_session)
 ) -> ProductoAlergenoResponse:
     """
     Actualiza una relación producto-alérgeno existente.
@@ -176,7 +175,7 @@ async def update_producto_alergeno(
     """
     try:
         producto_alergeno_service = ProductoAlergenoService(session)
-        return await producto_alergeno_service.update_producto_alergeno(
+        return await producto_alergeno_service.update_producto_alergeno_by_combination(
             id_producto, id_alergeno, producto_alergeno_data
         )
     except ProductoAlergenoNotFoundError as e:
@@ -197,8 +196,8 @@ async def update_producto_alergeno(
     description="Elimina una relación producto-alérgeno existente del sistema.",
 )
 async def delete_producto_alergeno(
-    id_producto: UUID,
-    id_alergeno: UUID,
+    id_producto: str,
+    id_alergeno: str,
     session: AsyncSession = Depends(get_database_session)
 ) -> None:
     """
@@ -216,8 +215,8 @@ async def delete_producto_alergeno(
     """
     try:
         producto_alergeno_service = ProductoAlergenoService(session)
-        result = await producto_alergeno_service.delete_producto_alergeno(id_producto, id_alergeno)
-        # No es necesario verificar el resultado aquí ya que delete_producto_alergeno
+        result = await producto_alergeno_service.delete_producto_alergeno_by_combination(id_producto, id_alergeno)
+        # No es necesario verificar el resultado aquí ya que delete_producto_alergeno_by_combination
         # lanza ProductoAlergenoNotFoundError si no encuentra la relación
     except ProductoAlergenoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

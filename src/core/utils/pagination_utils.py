@@ -2,8 +2,8 @@
 Pagination utilities for API responses.
 """
 
-from typing import List, TypeVar, Generic
-from pydantic import BaseModel, Field
+from typing import List, TypeVar, Generic, ClassVar
+from pydantic import BaseModel, Field, ConfigDict
 
 T = TypeVar("T")
 
@@ -23,6 +23,8 @@ class PaginationParams(BaseModel):
 class PaginatedResponse(BaseModel, Generic[T]):
     """Paginated response model."""
 
+    model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
+
     items: List[T] = Field(description="List of items")
     total: int = Field(description="Total number of items")
     page: int = Field(description="Current page number")
@@ -36,9 +38,6 @@ class PaginatedResponse(BaseModel, Generic[T]):
         # Calculate computed fields
         self.has_next = self.page < self.pages
         self.has_prev = self.page > 1
-
-    class Config:
-        arbitrary_types_allowed = True
 
 
 def paginate_query_result(

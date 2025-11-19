@@ -38,52 +38,58 @@ from src.models.menu.alergeno_model import AlergenoModel  # noqa: F401
 @pytest.mark.asyncio
 async def test_get_by_id():
     """
-    Verifica que el método get_by_id recupera correctamente una relación por su clave compuesta.
+    Verifica que el método get_by_id recupera correctamente una relación por su ID único.
 
     PRECONDICIONES:
         - Se debe tener una instancia mock de AsyncSession.
-        - Se deben tener UUIDs válidos para producto y alérgeno.
+        - Se debe tener un ULID válido para el ID de la relación.
 
     PROCESO:
         - Configurar el mock para simular la respuesta de la base de datos.
-        - Llamar al método get_by_id con los IDs específicos.
+        - Llamar al método get_by_id con el ID específico.
         - Verificar que se ejecute la consulta correcta y se retorne el resultado esperado.
 
     POSTCONDICIONES:
         - El método debe retornar un objeto ProductoAlergenoModel cuando existe la relación.
         - El método debe retornar None cuando no existe la relación.
-        - La consulta SQL debe formarse correctamente con ambas claves.
+        - La consulta SQL debe formarse correctamente con el ID único.
     """
     # Arrange
     mock_session = AsyncMock(spec=AsyncSession)
     mock_result = MagicMock()
-    
+
     id_producto = str(ULID())
     id_alergeno = str(ULID())
-    
-    mock_result.scalars.return_value.first.return_value = ProductoAlergenoModel(
+    id_relacion = str(ULID())  # ID único de la relación
+
+    producto_alergeno = ProductoAlergenoModel(
         id_producto=id_producto,
         id_alergeno=id_alergeno,
         nivel_presencia=NivelPresencia.CONTIENE,
         notas="Test allergen"
     )
+    # El ID ya se autogenera en __init__, pero lo sobreescribimos para el test
+    producto_alergeno.id = id_relacion
+
+    mock_result.scalars.return_value.first.return_value = producto_alergeno
     mock_session.execute.return_value = mock_result
 
     repository = ProductoAlergenoRepository(mock_session)
 
     # Act
-    result = await repository.get_by_id(id_producto, id_alergeno)
+    result = await repository.get_by_id(id_relacion)
 
     # Assert
     assert result is not None
     assert isinstance(result, ProductoAlergenoModel)
+    assert result.id == id_relacion
     assert result.id_producto == id_producto
     assert result.id_alergeno == id_alergeno
     mock_session.execute.assert_called_once()
 
     # Prueba de caso negativo
     mock_result.scalars.return_value.first.return_value = None
-    result = await repository.get_by_id(id_producto, id_alergeno)
+    result = await repository.get_by_id(str(ULID()))
     assert result is None
 
 
@@ -142,15 +148,15 @@ async def test_create_producto_alergeno():
 @pytest.mark.asyncio
 async def test_delete_producto_alergeno():
     """
-    Verifica que el método delete elimina correctamente una relación por su clave compuesta.
+    Verifica que el método delete elimina correctamente una relación por su ID único.
 
     PRECONDICIONES:
         - Se debe tener una instancia mock de AsyncSession.
-        - Se deben tener UUIDs válidos para producto y alérgeno.
+        - Se debe tener un ULID válido para el ID de la relación.
 
     PROCESO:
         - Configurar los mocks para simular el comportamiento de la base de datos.
-        - Llamar al método delete con los IDs específicos.
+        - Llamar al método delete con el ID específico.
         - Verificar que se ejecute la sentencia correcta y se retorne el resultado esperado.
 
     POSTCONDICIONES:
@@ -164,12 +170,11 @@ async def test_delete_producto_alergeno():
     mock_result.rowcount = 1  # Simula que se eliminó una fila
     mock_session.execute.return_value = mock_result
 
-    id_producto = str(ULID())
-    id_alergeno = str(ULID())
+    id_relacion = str(ULID())
     repository = ProductoAlergenoRepository(mock_session)
 
     # Act
-    result = await repository.delete(id_producto, id_alergeno)
+    result = await repository.delete(id_relacion)
 
     # Assert
     assert result is True
@@ -181,7 +186,7 @@ async def test_delete_producto_alergeno():
     mock_result.rowcount = 0  # Simula que no se eliminó ninguna fila
 
     # Act
-    result = await repository.delete(id_producto, id_alergeno)
+    result = await repository.delete(id_relacion)
 
     # Assert
     assert result is False
@@ -194,6 +199,6 @@ async def test_delete_producto_alergeno():
 
     # Act & Assert - Caso de error
     with pytest.raises(SQLAlchemyError):
-        await repository.delete(id_producto, id_alergeno)
+        await repository.delete(id_relacion)
 
     mock_session.rollback.assert_called_once()

@@ -39,7 +39,7 @@ class TipoOpcionModel(BaseModel, AuditMixin):
         Fecha y hora de última modificación (heredado de AuditMixin).
     """
 
-    __tablename__ = "tipo_opcion"
+    __tablename__ = "tipos_opciones"
 
     # Columnas específicas del modelo
     codigo: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)

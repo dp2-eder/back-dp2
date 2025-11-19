@@ -304,7 +304,7 @@ def test_list_categorias_success(
     assert response.status_code == 200
     assert response.json()["total"] == 2
     assert len(response.json()["items"]) == 2
-    mock_categoria_service.get_categorias.assert_awaited_once_with(0, 10)
+    mock_categoria_service.get_categorias.assert_awaited_once_with(0, 10, None, None)
 
 
 def test_list_categorias_validation_error(

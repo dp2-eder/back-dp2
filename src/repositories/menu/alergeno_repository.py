@@ -69,7 +69,7 @@ class AlergenoRepository:
 
         Parameters
         ----------
-        alergeno_id : UUID
+        alergeno_id : str
             Identificador único del alérgeno a buscar.
 
         Returns
@@ -87,7 +87,7 @@ class AlergenoRepository:
 
         Parameters
         ----------
-        alergeno_id : UUID
+        alergeno_id : str
             Identificador único del alérgeno a eliminar.
 
         Returns
@@ -115,7 +115,7 @@ class AlergenoRepository:
 
         Parameters
         ----------
-        alergeno_id : UUID
+        alergeno_id : str
             Identificador único del alérgeno a actualizar.
         **kwargs
             Campos y valores a actualizar.

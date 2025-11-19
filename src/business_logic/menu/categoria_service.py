@@ -2,11 +2,13 @@
 Servicio para la gestión de categorías en el sistema.
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from src.repositories.menu.categoria_repository import CategoriaRepository
+from src.repositories.mesas.mesa_repository import MesaRepository
+from src.repositories.mesas.locales_categorias_repository import LocalesCategoriasRepository
 from src.models.menu.categoria_model import CategoriaModel
 from src.api.schemas.categoria_schema import (
     CategoriaCreate,
@@ -23,6 +25,7 @@ from src.business_logic.exceptions.categoria_exceptions import (
     CategoriaNotFoundError,
     CategoriaConflictError,
 )
+from src.core.utils.text_utils import normalize_category_name, normalize_product_name
 
 
 class CategoriaService:
@@ -46,7 +49,10 @@ class CategoriaService:
         session : AsyncSession
             Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
         """
+        self.session = session
         self.repository = CategoriaRepository(session)
+        self.mesa_repository = MesaRepository(session)
+        self.locales_categorias_repository = LocalesCategoriasRepository(session)
 
     async def create_categoria(self, categoria_data: CategoriaCreate) -> CategoriaResponse:
         """
@@ -78,6 +84,9 @@ class CategoriaService:
             # Persistir en la base de datos
             created_categoria = await self.repository.create(categoria)
 
+            # Normalizar el nombre antes de retornar
+            created_categoria.nombre = normalize_category_name(created_categoria.nombre)
+            
             # Convertir y retornar como esquema de respuesta
             return CategoriaResponse.model_validate(created_categoria)
         except IntegrityError:
@@ -112,6 +121,9 @@ class CategoriaService:
         if not categoria:
             raise CategoriaNotFoundError(f"No se encontró la categoría con ID {categoria_id}")
 
+        # Normalizar el nombre antes de retornar
+        categoria.nombre = normalize_category_name(categoria.nombre)
+        
         # Convertir y retornar como esquema de respuesta
         return CategoriaResponse.model_validate(categoria)
 
@@ -143,9 +155,18 @@ class CategoriaService:
         result = await self.repository.delete(categoria_id)
         return result
 
-    async def get_categorias(self, skip: int = 0, limit: int = 100) -> CategoriaList:
+    async def get_categorias(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        id_mesa: Optional[str] = None,
+        id_local: Optional[str] = None
+    ) -> CategoriaList:
         """
         Obtiene una lista paginada de categorías.
+
+        Si se proporciona id_mesa o id_local, filtra categorías activas para ese local
+        y aplica orden personalizado si existe.
 
         Parameters
         ----------
@@ -153,6 +174,10 @@ class CategoriaService:
             Número de registros a omitir (offset), por defecto 0.
         limit : int, optional
             Número máximo de registros a retornar, por defecto 100.
+        id_mesa : Optional[str], optional
+            ID de mesa para filtrar categorías por su local.
+        id_local : Optional[str], optional
+            ID de local para filtrar categorías directamente.
 
         Returns
         -------
@@ -167,14 +192,84 @@ class CategoriaService:
         if limit < 1:
             raise CategoriaValidationError("El parámetro 'limit' debe ser mayor a cero")
 
-        # Obtener categorías desde el repositorio
-        categorias, total = await self.repository.get_all(skip, limit)
+        # Resolver local desde mesa si es necesario
+        local_id = None
 
-        # Convertir modelos a esquemas de resumen
-        categoria_summaries = [CategoriaSummary.model_validate(categoria) for categoria in categorias]
+        if id_mesa:
+            # Resolver: mesa → zona → local
+            local = await self.mesa_repository.get_local_by_mesa_id(id_mesa)
+            if local:
+                local_id = local.id
+            else:
+                raise CategoriaValidationError(
+                    f"La mesa {id_mesa} no tiene un local asignado"
+                )
+        elif id_local:
+            local_id = id_local
 
-        # Retornar esquema de lista
-        return CategoriaList(items=categoria_summaries, total=total)
+        # Filtrar por local si tenemos uno
+        if local_id:
+            return await self._get_categorias_con_local(local_id, skip, limit)
+        else:
+            # Sin filtro - retornar todas las categorías
+            categorias, total = await self.repository.get_all(skip, limit)
+
+            # Normalizar nombres y convertir modelos a esquemas de resumen
+            for categoria in categorias:
+                categoria.nombre = normalize_category_name(categoria.nombre)
+            categoria_summaries = [CategoriaSummary.model_validate(categoria) for categoria in categorias]
+
+            # Retornar esquema de lista
+            return CategoriaList(items=categoria_summaries, total=total)
+
+    async def _get_categorias_con_local(
+        self,
+        id_local: str,
+        skip: int,
+        limit: int
+    ) -> CategoriaList:
+        """
+        Obtiene categorías activas para un local con orden personalizado si existe.
+
+        Parameters
+        ----------
+        id_local : str
+            ID del local para filtrar.
+        skip : int
+            Número de registros a omitir.
+        limit : int
+            Número máximo de registros.
+
+        Returns
+        -------
+        CategoriaList
+            Lista de categorías activas para el local.
+        """
+        # Obtener relaciones local-categoría activas
+        relaciones, total = await self.locales_categorias_repository.get_categorias_by_local(
+            id_local,
+            activo=True,
+            skip=skip,
+            limit=limit
+        )
+
+        # Cargar categorías completas y aplicar orden personalizado
+        categorias_con_orden = []
+        for relacion in relaciones:
+            categoria = await self.repository.get_by_id(relacion.id_categoria)
+            if categoria:
+                # Normalizar nombre
+                categoria.nombre = normalize_category_name(categoria.nombre)
+
+                # Convertir a dict para modificar
+                categoria_dict = CategoriaSummary.model_validate(categoria).model_dump()
+
+                # Si hay orden_override, se puede incluir en metadata (opcional)
+                # categoria_dict['orden_local'] = relacion.orden_override
+
+                categorias_con_orden.append(CategoriaSummary.model_validate(categoria_dict))
+
+        return CategoriaList(items=categorias_con_orden, total=total)
 
     async def update_categoria(self, categoria_id: str, categoria_data: CategoriaUpdate) -> CategoriaResponse:
         """
@@ -215,6 +310,9 @@ class CategoriaService:
             if not updated_categoria:
                 raise CategoriaNotFoundError(f"No se encontró la categoría con ID {categoria_id}")
 
+            # Normalizar el nombre antes de retornar
+            updated_categoria.nombre = normalize_category_name(updated_categoria.nombre)
+            
             # Convertir y retornar como esquema de respuesta
             return CategoriaResponse.model_validate(updated_categoria)
         except IntegrityError:
@@ -264,7 +362,9 @@ class CategoriaService:
             # Persistir en la base de datos usando batch insert
             created_categorias = await self.repository.batch_insert(categoria_models)
 
-            # Convertir y retornar como esquemas de respuesta
+            # Normalizar nombres y convertir a esquemas de respuesta
+            for categoria in created_categorias:
+                categoria.nombre = normalize_category_name(categoria.nombre)
             return [
                 CategoriaResponse.model_validate(categoria)
                 for categoria in created_categorias
@@ -326,7 +426,9 @@ class CategoriaService:
                         f"No se encontraron las categorías con IDs: {missing_ids}"
                     )
 
-            # Convertir y retornar como esquemas de respuesta
+            # Normalizar nombres y convertir a esquemas de respuesta
+            for categoria in updated_categorias:
+                categoria.nombre = normalize_category_name(categoria.nombre)
             return [
                 CategoriaResponse.model_validate(categoria)
                 for categoria in updated_categorias
@@ -367,23 +469,59 @@ class CategoriaService:
         # Construir la lista de categorías con productos
         items = []
         for categoria in categorias:
-            # Construir lista de productos minimal
+            # Normalizar el nombre de la categoría
+            categoria_nombre_normalizado = normalize_category_name(categoria.nombre)
+            
+            # Construir lista de productos minimal (con nombres normalizados)
             productos_minimal = [
                 ProductoCardMinimal(
                     id=producto.id,
-                    nombre=producto.nombre,
+                    nombre=normalize_product_name(producto.nombre),
                     imagen_path=producto.imagen_path
                 )
                 for producto in categoria.productos
             ]
 
-            # Construir categoría con productos
+            # Construir categoría con productos (usando nombre normalizado)
             categoria_card = CategoriaConProductosCard(
                 id=categoria.id,
-                nombre=categoria.nombre,
+                nombre=categoria_nombre_normalizado,
                 imagen_path=categoria.imagen_path,
                 productos=productos_minimal
             )
             items.append(categoria_card)
 
         return CategoriaConProductosCardList(items=items, total=total)
+
+    async def get_categorias_activas(self, skip: int = 0, limit: int = 100) -> CategoriaList:
+        """
+        Obtiene una lista paginada de categorías activas.
+
+        Parameters
+        ----------
+        skip : int, optional
+            Número de registros a omitir (offset), por defecto 0.
+        limit : int, optional
+            Número máximo de registros a retornar, por defecto 100.
+
+        Returns
+        -------
+        CategoriaList
+            Esquema con la lista de categorías activas y el total.
+        """
+        # Validar parámetros de entrada
+        if skip < 0:
+            raise CategoriaValidationError("El parámetro 'skip' debe ser mayor o igual a cero")
+        if limit < 1:
+            raise CategoriaValidationError("El parámetro 'limit' debe ser mayor a cero")
+
+        # Obtener categorías activas desde el repositorio
+        categorias, total = await self.repository.get_all(skip, limit, activo=True)
+
+        # Normalizar nombres y convertir modelos a esquemas de resumen
+        for categoria in categorias:
+            categoria.nombre = normalize_category_name(categoria.nombre)
+        categoria_summaries = [CategoriaSummary.model_validate(categoria) for categoria in categorias]
+
+        # Retornar esquema de lista
+        return CategoriaList(items=categoria_summaries, total=total)

@@ -10,7 +10,6 @@ from typing import Any, Dict, Optional, Type, TypeVar, TYPE_CHECKING
 from decimal import Decimal
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Boolean, Integer, DECIMAL, ForeignKey, Index
-from uuid import UUID
 from src.models.base_model import BaseModel
 from src.models.mixins.audit_mixin import AuditMixin
 
@@ -31,9 +30,9 @@ class ProductoOpcionModel(BaseModel, AuditMixin):
 
     Attributes
     ----------
-    id_producto : UUID
+    id_producto : str
         Identificador del producto al que pertenece la opción.
-    id_tipo_opcion : UUID
+    id_tipo_opcion : str
         Identificador del tipo de opción (categoría de la opción).
     nombre : str
         Nombre de la opción específica (ej: "Sin ají", "Ají suave", "Con choclo", "Helada").
@@ -53,17 +52,17 @@ class ProductoOpcionModel(BaseModel, AuditMixin):
         Usuario que realizó la última modificación (heredado de AuditMixin).
     """
 
-    __tablename__ = "producto_opcion"
+    __tablename__ = "productos_opciones"
 
     # Foreign Keys - Relaciones con producto y tipo de opción
-    id_producto: Mapped[UUID] = mapped_column(
-        ForeignKey("producto.id", ondelete="CASCADE"),
+    id_producto: Mapped[str] = mapped_column(
+        ForeignKey("productos.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
     
-    id_tipo_opcion: Mapped[UUID] = mapped_column(
-        ForeignKey("tipo_opcion.id", ondelete="CASCADE"),
+    id_tipo_opcion: Mapped[str] = mapped_column(
+        ForeignKey("tipos_opciones.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )

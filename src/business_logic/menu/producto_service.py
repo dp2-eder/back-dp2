@@ -2,11 +2,13 @@
 Servicio para la gestión de productos en el sistema.
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from src.repositories.menu.producto_repository import ProductoRepository
+from src.repositories.mesas.mesa_repository import MesaRepository
+from src.repositories.mesas.locales_productos_repository import LocalesProductosRepository
 from src.models.menu.producto_model import ProductoModel
 from src.api.schemas.producto_schema import (
     ProductoCreate,
@@ -17,13 +19,15 @@ from src.api.schemas.producto_schema import (
     ProductoCard,
     ProductoCardList,
     ProductoConOpcionesResponse,
+    TipoOpcionConOpcionesSchema,
+    ProductoOpcionDetalleSchema
 )
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
     ProductoNotFoundError,
     ProductoConflictError,
 )
-
+from src.core.utils.text_utils import normalize_product_name, normalize_category_name
 
 class ProductoService:
     """Servicio para la gestión de productos en el sistema.
@@ -46,7 +50,10 @@ class ProductoService:
         session : AsyncSession
             Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
         """
+        self.session = session
         self.repository = ProductoRepository(session)
+        self.mesa_repository = MesaRepository(session)
+        self.locales_productos_repository = LocalesProductosRepository(session)
 
     async def create_producto(self, producto_data: ProductoCreate) -> ProductoResponse:
         """
@@ -81,6 +88,9 @@ class ProductoService:
             # Persistir en la base de datos
             created_producto = await self.repository.create(producto)
 
+            # Normalizar el nombre antes de retornar
+            created_producto.nombre = normalize_product_name(created_producto.nombre)
+            
             # Convertir y retornar como esquema de respuesta
             return ProductoResponse.model_validate(created_producto)
         except IntegrityError:
@@ -108,57 +118,43 @@ class ProductoService:
         ProductoNotFoundError
             Si no se encuentra un producto con el ID proporcionado.
         """
-        # Buscar el producto por su ID
+        # Buscar el producto por su ID (ahora incluye alérgenos)
         producto = await self.repository.get_by_id(producto_id)
 
         # Verificar si existe
         if not producto:
             raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
 
-        # Convertir y retornar como esquema de respuesta
-        return ProductoResponse.model_validate(producto)
+        # Convertir a dict y agregar alérgenos
+        producto_dict = producto.to_dict()
+        producto_dict['alergenos'] = getattr(producto, '_alergenos', [])
 
-    async def get_producto_con_opciones(self, producto_id: str) -> "ProductoConOpcionesResponse":
+        # Convertir y retornar como esquema de respuesta
+        return ProductoResponse.model_validate(producto_dict)
+
+    async def get_producto_con_opciones(self, producto_id: str) -> ProductoConOpcionesResponse:
         """
         Obtiene un producto por su ID con todas sus opciones agrupadas por tipo.
-        
-        Modified: Now returns description, price, and options grouped by type.
-        
-        Parameters
-        ----------
-        producto_id : str
-            Identificador único del producto a buscar (ULID).
-            
         Returns
         -------
         ProductoConOpcionesResponse
             Esquema de respuesta con el producto y opciones agrupadas por tipo.
-            
-        Raises
-        ------
-        ProductoNotFoundError
-            Si no se encuentra un producto con el ID proporcionado.
         """
-        from src.api.schemas.producto_schema import ProductoConOpcionesResponse
-        
-        # Buscar el producto con opciones (eager loading includes tipo_opcion)
+
+
+        # Buscar el producto con opciones
         producto = await self.repository.get_by_id_with_opciones(producto_id)
-        
-        # Verificar si existe
         if not producto:
             raise ProductoNotFoundError(
                 f"No se encontró el producto con el ID proporcionado"
             )
-        
+
         # Agrupar opciones por tipo
         tipos_dict: dict[str, dict] = {}
-        
         for opcion in producto.opciones:
-            tipo_id = str(opcion.id_tipo_opcion)  # Convert to str for dict key
-            
-            # Crear entrada del tipo si no existe
+            tipo_id = str(opcion.id_tipo_opcion)
             if tipo_id not in tipos_dict:
-                tipo_opcion = opcion.tipo_opcion  # Viene por eager loading
+                tipo_opcion = opcion.tipo_opcion
                 tipos_dict[tipo_id] = {
                     "id_tipo_opcion": tipo_id,
                     "nombre_tipo": tipo_opcion.nombre,
@@ -168,8 +164,6 @@ class ProductoService:
                     "orden_tipo": tipo_opcion.orden if tipo_opcion.orden else 0,
                     "opciones": []
                 }
-            
-            # Agregar opción al tipo correspondiente
             tipos_dict[tipo_id]["opciones"].append({
                 "id": opcion.id,
                 "nombre": opcion.nombre,
@@ -179,24 +173,12 @@ class ProductoService:
                 "fecha_creacion": opcion.fecha_creacion,
                 "fecha_modificacion": opcion.fecha_modificacion
             })
-        
-        # Convertir dict a lista y ordenar
+
         tipos_list = list(tipos_dict.values())
-        
-        # Ordenar tipos por orden_tipo
         tipos_list.sort(key=lambda x: x["orden_tipo"])
-        
-        # Ordenar opciones dentro de cada tipo por orden
         for tipo in tipos_list:
             tipo["opciones"].sort(key=lambda x: x["orden"])
-        
-        # Construir respuesta con todos los campos
-        from src.api.schemas.producto_schema import (
-            TipoOpcionConOpcionesSchema,
-            ProductoOpcionDetalleSchema
-        )
-        
-        # Convertir tipos_list a schemas validados
+
         tipos_opciones_schemas = [
             TipoOpcionConOpcionesSchema(
                 id_tipo_opcion=tipo["id_tipo_opcion"],
@@ -212,21 +194,19 @@ class ProductoService:
             )
             for tipo in tipos_list
         ]
-        
+
         return ProductoConOpcionesResponse(
-            # Info del producto (includes descripcion and precio_base)
             id=producto.id,
-            nombre=producto.nombre,
+            nombre=normalize_product_name(producto.nombre),
             descripcion=producto.descripcion,
             precio_base=producto.precio_base,
             imagen_path=producto.imagen_path,
             imagen_alt_text=producto.imagen_alt_text,
-            id_categoria=str(producto.id_categoria),  # Convert UUID to str
+            id_categoria=str(producto.id_categoria),
             disponible=producto.disponible,
             destacado=producto.destacado,
             fecha_creacion=producto.fecha_creacion,
             fecha_modificacion=producto.fecha_modificacion,
-            # Opciones agrupadas por tipo
             tipos_opciones=tipos_opciones_schemas
         )
 
@@ -258,11 +238,13 @@ class ProductoService:
         result = await self.repository.delete(producto_id)
         return result
 
-    async def get_productos(    
-        self, 
-        skip: int = 0, 
+    async def get_productos(
+        self,
+        skip: int = 0,
         limit: int = 100,
-        id_categoria: str | None = None
+        id_categoria: str | None = None,
+        id_mesa: Optional[str] = None,
+        id_local: Optional[str] = None
     ) -> ProductoList:
         """
         Obtiene una lista paginada de productos.
@@ -273,6 +255,12 @@ class ProductoService:
             Número de registros a omitir (offset), por defecto 0.
         limit : int, optional
             Número máximo de registros a retornar, por defecto 100.
+        id_categoria : str, optional
+            ID de categoría para filtrar productos.
+        id_mesa : str, optional
+            ID de mesa para filtrar por local (el backend resuelve local automáticamente).
+        id_local : str, optional
+            ID de local para filtrar directamente.
 
         Returns
         -------
@@ -287,14 +275,95 @@ class ProductoService:
         if limit < 1:
             raise ProductoValidationError("El parámetro 'limit' debe ser mayor a cero")
 
-        # Obtener productos desde el repositorio
-        productos, total = await self.repository.get_all(skip, limit, id_categoria)
+        # Resolver local desde mesa si es necesario
+        local_id = None
 
-        # Convertir modelos a esquemas de resumen
-        producto_summaries = [ProductoSummary.model_validate(producto) for producto in productos]
+        if id_mesa:
+            # Resolver: mesa → zona → local
+            local = await self.mesa_repository.get_local_by_mesa_id(id_mesa)
+            if local:
+                local_id = local.id
+            else:
+                raise ProductoValidationError(f"La mesa {id_mesa} no tiene un local asignado")
+        elif id_local:
+            local_id = id_local
 
-        # Retornar esquema de lista
-        return ProductoList(items=producto_summaries, total=total)
+        # Filtrar por local si tenemos uno
+        if local_id:
+            return await self._get_productos_con_local(local_id, skip, limit, id_categoria)
+        else:
+            # Sin filtro - retornar todos los productos (backward compatible)
+            productos, total = await self.repository.get_all(skip, limit, id_categoria)
+
+            # Normalizar nombres y convertir modelos a esquemas de resumen
+            for producto in productos:
+                producto.nombre = normalize_product_name(producto.nombre)
+            producto_summaries = [ProductoSummary.model_validate(producto) for producto in productos]
+
+            # Retornar esquema de lista
+            return ProductoList(items=producto_summaries, total=total)
+
+    async def _get_productos_con_local(
+        self,
+        id_local: str,
+        skip: int,
+        limit: int,
+        id_categoria: Optional[str] = None
+    ) -> ProductoList:
+        """
+        Obtiene productos filtrados por local con overrides aplicados.
+
+        Parameters
+        ----------
+        id_local : str
+            ID del local para filtrar.
+        skip : int
+            Número de registros a omitir.
+        limit : int
+            Número máximo de registros a retornar.
+        id_categoria : str, optional
+            ID de categoría para filtrar productos.
+
+        Returns
+        -------
+        ProductoList
+            Lista de productos con overrides aplicados.
+        """
+        from decimal import Decimal
+
+        # Obtener relaciones local-producto activas
+        relaciones, total = await self.locales_productos_repository.get_productos_by_local(
+            id_local, activo=True, skip=skip, limit=limit
+        )
+
+        # Cargar productos completos y aplicar overrides
+        productos_con_overrides = []
+        for relacion in relaciones:
+            producto = await self.repository.get_by_id(relacion.id_producto)
+            if producto:
+                # Filtrar por categoría si se especificó
+                if id_categoria and str(producto.id_categoria) != id_categoria:
+                    total -= 1  # Ajustar el total
+                    continue
+
+                # Aplicar overrides (NULL = usar original, NOT NULL = usar custom)
+                producto_dict = producto.to_dict()
+                producto_dict['nombre'] = normalize_product_name(
+                    relacion.nombre_override if relacion.nombre_override is not None else producto.nombre
+                )
+                producto_dict['precio_base'] = (
+                    relacion.precio_override if relacion.precio_override is not None else producto.precio_base
+                )
+                producto_dict['descripcion'] = (
+                    relacion.descripcion_override if relacion.descripcion_override is not None else producto.descripcion
+                )
+                producto_dict['disponible'] = (
+                    relacion.disponible_override if relacion.disponible_override is not None else producto.disponible
+                )
+
+                productos_con_overrides.append(ProductoSummary.model_validate(producto_dict))
+
+        return ProductoList(items=productos_con_overrides, total=total)
 
     async def update_producto(self, producto_id: str, producto_data: ProductoUpdate) -> ProductoResponse:
         """
@@ -335,6 +404,9 @@ class ProductoService:
             if not updated_producto:
                 raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
 
+            # Normalizar el nombre antes de retornar
+            updated_producto.nombre = normalize_product_name(updated_producto.nombre)
+            
             # Convertir y retornar como esquema de respuesta
             return ProductoResponse.model_validate(updated_producto)
         except IntegrityError:
@@ -387,7 +459,9 @@ class ProductoService:
             # Persistir en la base de datos usando batch insert
             created_productos = await self.repository.batch_insert(producto_models)
 
-            # Convertir y retornar como esquemas de respuesta
+            # Normalizar nombres y convertir a esquemas de respuesta
+            for producto in created_productos:
+                producto.nombre = normalize_product_name(producto.nombre)
             return [
                 ProductoResponse.model_validate(producto)
                 for producto in created_productos
@@ -449,7 +523,9 @@ class ProductoService:
                         f"No se encontraron los productos con IDs: {missing_ids}"
                     )
 
-            # Convertir y retornar como esquemas de respuesta
+            # Normalizar nombres y convertir a esquemas de respuesta
+            for producto in updated_productos:
+                producto.nombre = normalize_product_name(producto.nombre)
             return [
                 ProductoResponse.model_validate(producto)
                 for producto in updated_productos
@@ -471,7 +547,7 @@ class ProductoService:
 
         Parameters
         ----------
-        categoria_id : UUID | None, optional
+        categoria_id : str | None, optional
             ID de la categoría para filtrar productos. Si es None, retorna todos los productos.
         skip : int, optional
             Número de registros a omitir (offset), por defecto 0.
@@ -503,15 +579,15 @@ class ProductoService:
         # Necesitamos incluir la información de la categoría para cada producto
         producto_cards = []
         for producto in productos:
-            # Construir el objeto ProductoCard con información de categoría
+            # Construir el objeto ProductoCard con información de categoría (nombres normalizados)
             card_data = {
                 "id": producto.id,
-                "nombre": producto.nombre,
+                "nombre": normalize_product_name(producto.nombre),
                 "imagen_path": producto.imagen_path,
                 "precio_base": producto.precio_base,
                 "categoria": {
                     "id": producto.categoria.id,
-                    "nombre": producto.categoria.nombre,
+                    "nombre": normalize_category_name(producto.categoria.nombre),
                     "imagen_path": producto.categoria.imagen_path,
                 }
             }

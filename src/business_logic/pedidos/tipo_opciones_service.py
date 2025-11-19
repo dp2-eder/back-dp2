@@ -2,11 +2,13 @@
 Servicio para la gestión de tipos de opciones en el sistema.
 """
 
-from uuid import UUID
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from src.repositories.pedidos.tipo_opciones_repository import TipoOpcionRepository
+from src.repositories.mesas.mesa_repository import MesaRepository
+from src.repositories.mesas.locales_tipos_opciones_repository import LocalesTiposOpcionesRepository
 from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
 from src.api.schemas.tipo_opciones_schema import (
     TipoOpcionCreate,
@@ -43,7 +45,10 @@ class TipoOpcionService:
         session : AsyncSession
             Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
         """
+        self.session = session
         self.repository = TipoOpcionRepository(session)
+        self.mesa_repository = MesaRepository(session)
+        self.locales_tipos_opciones_repository = LocalesTiposOpcionesRepository(session)
 
     async def create_tipo_opcion(self, tipo_opcion_data: TipoOpcionCreate) -> TipoOpcionResponse:
         """
@@ -85,13 +90,13 @@ class TipoOpcionService:
                 f"Ya existe un tipo de opción con el código '{tipo_opcion_data.codigo}'"
             )
 
-    async def get_tipo_opcion_by_id(self, tipo_opcion_id: UUID) -> TipoOpcionResponse:
+    async def get_tipo_opcion_by_id(self, tipo_opcion_id: str) -> TipoOpcionResponse:
         """
         Obtiene un tipo de opción por su ID.
 
         Parameters
         ----------
-        tipo_opcion_id : UUID
+        tipo_opcion_id : str
             Identificador único del tipo de opción a buscar.
 
         Returns
@@ -114,13 +119,13 @@ class TipoOpcionService:
         # Convertir y retornar como esquema de respuesta
         return TipoOpcionResponse.model_validate(tipo_opcion)
 
-    async def delete_tipo_opcion(self, tipo_opcion_id: UUID) -> bool:
+    async def delete_tipo_opcion(self, tipo_opcion_id: str) -> bool:
         """
         Elimina un tipo de opción por su ID.
 
         Parameters
         ----------
-        tipo_opcion_id : UUID
+        tipo_opcion_id : str
             Identificador único del tipo de opción a eliminar.
 
         Returns
@@ -142,7 +147,13 @@ class TipoOpcionService:
         result = await self.repository.delete(tipo_opcion_id)
         return result
 
-    async def get_tipos_opciones(self, skip: int = 0, limit: int = 100) -> TipoOpcionList:
+    async def get_tipos_opciones(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        id_mesa: Optional[str] = None,
+        id_local: Optional[str] = None
+    ) -> TipoOpcionList:
         """
         Obtiene una lista paginada de tipos de opciones.
 
@@ -152,6 +163,10 @@ class TipoOpcionService:
             Número de registros a omitir (offset), por defecto 0.
         limit : int, optional
             Número máximo de registros a retornar, por defecto 100.
+        id_mesa : str, optional
+            ID de mesa para filtrar por local (el backend resuelve local automáticamente).
+        id_local : str, optional
+            ID de local para filtrar directamente.
 
         Returns
         -------
@@ -166,22 +181,76 @@ class TipoOpcionService:
         if limit < 1:
             raise TipoOpcionValidationError("El parámetro 'limit' debe ser mayor a cero")
 
-        # Obtener tipos de opciones desde el repositorio
-        tipos_opciones, total = await self.repository.get_all(skip, limit)
+        # Resolver local desde mesa si es necesario
+        local_id = None
 
-        # Convertir modelos a esquemas de resumen
-        tipo_opcion_summaries = [TipoOpcionSummary.model_validate(tipo_opcion) for tipo_opcion in tipos_opciones]
+        if id_mesa:
+            # Resolver: mesa → zona → local
+            local = await self.mesa_repository.get_local_by_mesa_id(id_mesa)
+            if local:
+                local_id = local.id
+            else:
+                raise TipoOpcionValidationError(f"La mesa {id_mesa} no tiene un local asignado")
+        elif id_local:
+            local_id = id_local
 
-        # Retornar esquema de lista
-        return TipoOpcionList(items=tipo_opcion_summaries, total=total)
+        # Filtrar por local si tenemos uno
+        if local_id:
+            return await self._get_tipos_opciones_con_local(local_id, skip, limit)
+        else:
+            # Sin filtro - retornar todos los tipos de opciones (backward compatible)
+            tipos_opciones, total = await self.repository.get_all(skip, limit)
 
-    async def update_tipo_opcion(self, tipo_opcion_id: UUID, tipo_opcion_data: TipoOpcionUpdate) -> TipoOpcionResponse:
+            # Convertir modelos a esquemas de resumen
+            tipo_opcion_summaries = [TipoOpcionSummary.model_validate(tipo_opcion) for tipo_opcion in tipos_opciones]
+
+            # Retornar esquema de lista
+            return TipoOpcionList(items=tipo_opcion_summaries, total=total)
+
+    async def _get_tipos_opciones_con_local(
+        self,
+        id_local: str,
+        skip: int,
+        limit: int
+    ) -> TipoOpcionList:
+        """
+        Obtiene tipos de opciones filtrados por local.
+
+        Parameters
+        ----------
+        id_local : str
+            ID del local para filtrar.
+        skip : int
+            Número de registros a omitir.
+        limit : int
+            Número máximo de registros a retornar.
+
+        Returns
+        -------
+        TipoOpcionList
+            Lista de tipos de opciones activos en el local.
+        """
+        # Obtener relaciones local-tipo_opcion activas
+        relaciones, total = await self.locales_tipos_opciones_repository.get_tipos_opciones_by_local(
+            id_local, activo=True, skip=skip, limit=limit
+        )
+
+        # Cargar tipos de opciones completos
+        tipos_opciones = []
+        for relacion in relaciones:
+            tipo_opcion = await self.repository.get_by_id(relacion.id_tipo_opcion)
+            if tipo_opcion:
+                tipos_opciones.append(TipoOpcionSummary.model_validate(tipo_opcion))
+
+        return TipoOpcionList(items=tipos_opciones, total=total)
+
+    async def update_tipo_opcion(self, tipo_opcion_id: str, tipo_opcion_data: TipoOpcionUpdate) -> TipoOpcionResponse:
         """
         Actualiza un tipo de opción existente.
 
         Parameters
         ----------
-        tipo_opcion_id : UUID
+        tipo_opcion_id : str
             Identificador único del tipo de opción a actualizar.
         tipo_opcion_data : TipoOpcionUpdate
             Datos para actualizar el tipo de opción.

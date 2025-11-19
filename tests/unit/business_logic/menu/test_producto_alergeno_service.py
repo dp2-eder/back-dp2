@@ -157,38 +157,36 @@ async def test_get_producto_alergeno_by_id_success(
     producto_alergeno_service, mock_repository, sample_producto_alergeno_data
 ):
     """
-    Prueba la obtención exitosa de una relación por su clave compuesta.
+    Prueba la obtención exitosa de una relación por su ID único.
 
     PRECONDICIONES:
         - El servicio y repositorio mock deben estar configurados.
 
     PROCESO:
         - Configura el mock para simular la existencia de la relación.
-        - Llama al método get_producto_alergeno_by_id con IDs válidos.
+        - Llama al método get_producto_alergeno_by_id con ID válido.
         - Verifica el resultado y las llamadas al mock.
 
     POSTCONDICIONES:
         - El servicio debe retornar la relación correctamente.
-        - El repositorio debe ser llamado con los IDs correctos.
+        - El repositorio debe ser llamado con el ID correcto.
     """
     # Arrange
-    id_producto = sample_producto_alergeno_data["id_producto"]
-    id_alergeno = sample_producto_alergeno_data["id_alergeno"]
-    mock_repository.get_by_id.return_value = ProductoAlergenoModel(
-        **sample_producto_alergeno_data
-    )
+    id_relacion = str(ULID())
+    producto_alergeno = ProductoAlergenoModel(**sample_producto_alergeno_data)
+    producto_alergeno.id = id_relacion
+    mock_repository.get_by_id.return_value = producto_alergeno
 
     # Act
-    result = await producto_alergeno_service.get_producto_alergeno_by_id(
-        id_producto, id_alergeno
-    )
+    result = await producto_alergeno_service.get_producto_alergeno_by_id(id_relacion)
 
     # Assert
-    assert result.id_producto == id_producto
-    assert result.id_alergeno == id_alergeno
+    assert result.id == id_relacion
+    assert result.id_producto == sample_producto_alergeno_data["id_producto"]
+    assert result.id_alergeno == sample_producto_alergeno_data["id_alergeno"]
     assert result.nivel_presencia == sample_producto_alergeno_data["nivel_presencia"]
     assert result.notas == sample_producto_alergeno_data["notas"]
-    mock_repository.get_by_id.assert_called_once_with(id_producto, id_alergeno)
+    mock_repository.get_by_id.assert_called_once_with(id_relacion)
 
 
 @pytest.mark.asyncio
@@ -203,27 +201,22 @@ async def test_get_producto_alergeno_by_id_not_found(
 
     PROCESO:
         - Configura el mock para simular que la relación no existe.
-        - Llama al método get_producto_alergeno_by_id con IDs inexistentes.
+        - Llama al método get_producto_alergeno_by_id con ID inexistente.
         - Verifica que se lance la excepción adecuada.
 
     POSTCONDICIONES:
         - El servicio debe lanzar ProductoAlergenoNotFoundError.
     """
     # Arrange
-    id_producto = str(ULID())
-    id_alergeno = str(ULID())
+    id_relacion = str(ULID())
     mock_repository.get_by_id.return_value = None
 
     # Act & Assert
     with pytest.raises(ProductoAlergenoNotFoundError) as excinfo:
-        await producto_alergeno_service.get_producto_alergeno_by_id(
-            id_producto, id_alergeno
-        )
+        await producto_alergeno_service.get_producto_alergeno_by_id(id_relacion)
 
-    assert f"No se encontró la relación entre producto {id_producto}" in str(
-        excinfo.value
-    )
-    mock_repository.get_by_id.assert_called_once_with(id_producto, id_alergeno)
+    assert f"No se encontró la relación con ID {id_relacion}" in str(excinfo.value)
+    mock_repository.get_by_id.assert_called_once_with(id_relacion)
 
 
 @pytest.mark.asyncio
@@ -238,30 +231,27 @@ async def test_delete_producto_alergeno_success(
 
     PROCESO:
         - Configura el mock para simular la existencia y eliminación exitosa.
-        - Llama al método delete_producto_alergeno con IDs válidos.
+        - Llama al método delete_producto_alergeno con ID válido.
         - Verifica el resultado y las llamadas al mock.
 
     POSTCONDICIONES:
         - El servicio debe eliminar la relación correctamente.
-        - El repositorio debe ser llamado con los IDs correctos.
+        - El repositorio debe ser llamado con el ID correcto.
     """
     # Arrange
-    id_producto = sample_producto_alergeno_data["id_producto"]
-    id_alergeno = sample_producto_alergeno_data["id_alergeno"]
-    mock_repository.get_by_id.return_value = ProductoAlergenoModel(
-        **sample_producto_alergeno_data
-    )
+    id_relacion = str(ULID())
+    producto_alergeno = ProductoAlergenoModel(**sample_producto_alergeno_data)
+    producto_alergeno.id = id_relacion
+    mock_repository.get_by_id.return_value = producto_alergeno
     mock_repository.delete.return_value = True
 
     # Act
-    result = await producto_alergeno_service.delete_producto_alergeno(
-        id_producto, id_alergeno
-    )
+    result = await producto_alergeno_service.delete_producto_alergeno(id_relacion)
 
     # Assert
     assert result is True
-    mock_repository.get_by_id.assert_called_once_with(id_producto, id_alergeno)
-    mock_repository.delete.assert_called_once_with(id_producto, id_alergeno)
+    mock_repository.get_by_id.assert_called_once_with(id_relacion)
+    mock_repository.delete.assert_called_once_with(id_relacion)
 
 
 @pytest.mark.asyncio
@@ -276,27 +266,22 @@ async def test_delete_producto_alergeno_not_found(
 
     PROCESO:
         - Configura el mock para simular que la relación no existe.
-        - Llama al método delete_producto_alergeno con IDs inexistentes.
+        - Llama al método delete_producto_alergeno con ID inexistente.
         - Verifica que se lance la excepción adecuada.
 
     POSTCONDICIONES:
         - El servicio debe lanzar ProductoAlergenoNotFoundError.
     """
     # Arrange
-    id_producto = str(ULID())
-    id_alergeno = str(ULID())
+    id_relacion = str(ULID())
     mock_repository.get_by_id.return_value = None
 
     # Act & Assert
     with pytest.raises(ProductoAlergenoNotFoundError) as excinfo:
-        await producto_alergeno_service.delete_producto_alergeno(
-            id_producto, id_alergeno
-        )
+        await producto_alergeno_service.delete_producto_alergeno(id_relacion)
 
-    assert f"No se encontró la relación entre producto {id_producto}" in str(
-        excinfo.value
-    )
-    mock_repository.get_by_id.assert_called_once_with(id_producto, id_alergeno)
+    assert f"No se encontró la relación con ID {id_relacion}" in str(excinfo.value)
+    mock_repository.get_by_id.assert_called_once_with(id_relacion)
     mock_repository.delete.assert_not_called()
 
 
@@ -390,8 +375,7 @@ async def test_update_producto_alergeno_success(
         - El repositorio debe ser llamado con los parámetros correctos.
     """
     # Arrange
-    id_producto = sample_producto_alergeno_data["id_producto"]
-    id_alergeno = sample_producto_alergeno_data["id_alergeno"]
+    id_relacion = str(ULID())
     update_data = ProductoAlergenoUpdate(
         nivel_presencia=NivelPresencia.TRAZAS, notas="Actualizado: contiene trazas"
     )
@@ -403,21 +387,22 @@ async def test_update_producto_alergeno_success(
             "notas": "Actualizado: contiene trazas",
         }
     )
+    updated_producto_alergeno.id = id_relacion
     mock_repository.update.return_value = updated_producto_alergeno
 
     # Act
     result = await producto_alergeno_service.update_producto_alergeno(
-        id_producto, id_alergeno, update_data
+        id_relacion, update_data
     )
 
     # Assert
-    assert result.id_producto == id_producto
-    assert result.id_alergeno == id_alergeno
+    assert result.id == id_relacion
+    assert result.id_producto == sample_producto_alergeno_data["id_producto"]
+    assert result.id_alergeno == sample_producto_alergeno_data["id_alergeno"]
     assert result.nivel_presencia == NivelPresencia.TRAZAS
     assert result.notas == "Actualizado: contiene trazas"
     mock_repository.update.assert_called_once_with(
-        id_producto,
-        id_alergeno,
+        id_relacion,
         nivel_presencia=NivelPresencia.TRAZAS,
         notas="Actualizado: contiene trazas",
     )
@@ -435,29 +420,26 @@ async def test_update_producto_alergeno_not_found(
 
     PROCESO:
         - Configura el mock para simular que la relación no existe.
-        - Llama al método update_producto_alergeno con IDs inexistentes.
+        - Llama al método update_producto_alergeno con ID inexistente.
         - Verifica que se lance la excepción adecuada.
 
     POSTCONDICIONES:
         - El servicio debe lanzar ProductoAlergenoNotFoundError.
     """
     # Arrange
-    id_producto = str(ULID())
-    id_alergeno = str(ULID())
+    id_relacion = str(ULID())
     update_data = ProductoAlergenoUpdate(nivel_presencia=NivelPresencia.TRAZAS)
     mock_repository.update.return_value = None
 
     # Act & Assert
     with pytest.raises(ProductoAlergenoNotFoundError) as excinfo:
         await producto_alergeno_service.update_producto_alergeno(
-            id_producto, id_alergeno, update_data
+            id_relacion, update_data
         )
 
-    assert f"No se encontró la relación entre producto {id_producto}" in str(
-        excinfo.value
-    )
+    assert f"No se encontró la relación con ID {id_relacion}" in str(excinfo.value)
     mock_repository.update.assert_called_once_with(
-        id_producto, id_alergeno, nivel_presencia=NivelPresencia.TRAZAS
+        id_relacion, nivel_presencia=NivelPresencia.TRAZAS
     )
 
 
@@ -481,21 +463,21 @@ async def test_update_producto_alergeno_no_changes(
         - El repositorio update no debe ser llamado.
     """
     # Arrange
-    id_producto = sample_producto_alergeno_data["id_producto"]
-    id_alergeno = sample_producto_alergeno_data["id_alergeno"]
+    id_relacion = str(ULID())
     update_data = ProductoAlergenoUpdate()  # Sin cambios
-    mock_repository.get_by_id.return_value = ProductoAlergenoModel(
-        **sample_producto_alergeno_data
-    )
+    producto_alergeno = ProductoAlergenoModel(**sample_producto_alergeno_data)
+    producto_alergeno.id = id_relacion
+    mock_repository.get_by_id.return_value = producto_alergeno
 
     # Act
     result = await producto_alergeno_service.update_producto_alergeno(
-        id_producto, id_alergeno, update_data
+        id_relacion, update_data
     )
 
     # Assert
-    assert result.id_producto == id_producto
-    assert result.id_alergeno == id_alergeno
+    assert result.id == id_relacion
+    assert result.id_producto == sample_producto_alergeno_data["id_producto"]
+    assert result.id_alergeno == sample_producto_alergeno_data["id_alergeno"]
     assert result.nivel_presencia == sample_producto_alergeno_data["nivel_presencia"]
-    mock_repository.get_by_id.assert_called_once_with(id_producto, id_alergeno)
+    mock_repository.get_by_id.assert_called_once_with(id_relacion)
     mock_repository.update.assert_not_called()

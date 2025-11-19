@@ -8,7 +8,7 @@ def test_mesa_model_creation():
     Verifica que un objeto Mesa se crea correctamente.
 
     PRECONDICIONES:
-        - Dado un id, numero, zona, capacidad, qr_code.
+        - Dado un id, numero, id_zona, capacidad.
 
     PROCESO:
         - Crear un registro de Mesa con valores predefinidos.
@@ -19,21 +19,21 @@ def test_mesa_model_creation():
     mesa_id: str = str(ULID())
     mesa_numero = 101
     mesa_capacidad = 4
-    mesa_zona = "zone 1"
+    id_zona = str(ULID())
     mesa_estado = EstadoMesa.LIBRE
 
     mesa = MesaModel(
         id=mesa_id,
         numero=mesa_numero,
         capacidad=mesa_capacidad,
-        zona=mesa_zona,
+        id_zona=id_zona,
         estado=mesa_estado
     )
 
     assert mesa.id == mesa_id
     assert mesa.numero == mesa_numero
     assert mesa.capacidad == mesa_capacidad
-    assert mesa.zona == mesa_zona
+    assert mesa.id_zona == id_zona
     assert mesa.estado == mesa_estado
 
    
@@ -43,7 +43,7 @@ def test_rol_to_dict():
 
     PRECONDICIONES:
         - La clase MesaModel debe tener implementado el método to_dict().
-        - Los atributos id, numero, capacidad, zona, qr_code y estado deben existir en el modelo.
+        - Los atributos id, numero, capacidad, id_zona y estado deben existir en el modelo.
 
     PROCESO:
         - Crear una instancia de MesaModel con valores específicos.
@@ -56,24 +56,24 @@ def test_rol_to_dict():
     mesa_id: str = str(ULID())
     mesa_numero = 105
     mesa_capacidad = 6
-    mesa_zona = "zone 2"
+    id_zona = str(ULID())
     mesa_estado = EstadoMesa.OCUPADA
 
     mesa = MesaModel(id=mesa_id, numero=mesa_numero, capacidad=mesa_capacidad,
-                zona=mesa_zona, estado=mesa_estado)
+                id_zona=id_zona, estado=mesa_estado)
 
     dict_result = mesa.to_dict()
 
     assert "id" in dict_result
     assert "numero" in dict_result
     assert "capacidad" in dict_result
-    assert "zona" in dict_result
+    assert "id_zona" in dict_result
     assert "estado" in dict_result
 
     assert dict_result["id"] == mesa_id
     assert dict_result["numero"] == mesa_numero
     assert dict_result["capacidad"] == mesa_capacidad
-    assert dict_result["zona"] == mesa_zona
+    assert dict_result["id_zona"] == id_zona
     assert dict_result["estado"] == mesa_estado
     assert dict_result["activo"] is None
     
@@ -98,5 +98,5 @@ def test_mesa_activo_default():
 
     # El default debería ser True según el modelo
     assert mesa.capacidad is None
-    assert mesa.zona is None
+    assert mesa.id_zona is None
 

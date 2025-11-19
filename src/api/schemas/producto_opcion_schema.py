@@ -3,7 +3,6 @@ Pydantic schemas for ProductoOpcion (Product Option) entities.
 """
 
 from typing import Optional, ClassVar, List
-# UUID removed - using str for ULID compatibility
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict

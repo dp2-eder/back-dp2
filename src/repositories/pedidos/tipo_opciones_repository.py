@@ -3,7 +3,6 @@ Repositorio para la gestión de tipos de opciones en el sistema.
 """
 
 from typing import Optional, List, Tuple
-from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,13 +63,13 @@ class TipoOpcionRepository:
             await self.session.rollback()
             raise
 
-    async def get_by_id(self, tipo_opcion_id: UUID) -> Optional[TipoOpcionModel]:
+    async def get_by_id(self, tipo_opcion_id: str) -> Optional[TipoOpcionModel]:
         """
         Obtiene un tipo de opción por su identificador único.
 
         Parameters
         ----------
-        tipo_opcion_id : UUID
+        tipo_opcion_id : str
             Identificador único del tipo de opción a buscar.
 
         Returns
@@ -82,13 +81,13 @@ class TipoOpcionRepository:
         result = await self.session.execute(query)
         return result.scalars().first()
 
-    async def delete(self, tipo_opcion_id: UUID) -> bool:
+    async def delete(self, tipo_opcion_id: str) -> bool:
         """
         Elimina un tipo de opción de la base de datos por su ID.
 
         Parameters
         ----------
-        tipo_opcion_id : UUID
+        tipo_opcion_id : str
             Identificador único del tipo de opción a eliminar.
 
         Returns
@@ -110,13 +109,13 @@ class TipoOpcionRepository:
             await self.session.rollback()
             raise
 
-    async def update(self, tipo_opcion_id: UUID, **kwargs) -> Optional[TipoOpcionModel]:
+    async def update(self, tipo_opcion_id: str, **kwargs) -> Optional[TipoOpcionModel]:
         """
         Actualiza un tipo de opción existente con los valores proporcionados.
 
         Parameters
         ----------
-        tipo_opcion_id : UUID
+        tipo_opcion_id : str
             Identificador único del tipo de opción a actualizar.
         **kwargs
             Campos y valores a actualizar.

@@ -3,7 +3,6 @@ Pydantic schemas for Categoria (Category) entities.
 """
 
 from typing import Optional, ClassVar, List
-# UUID removed - using str for ULID compatibility
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 

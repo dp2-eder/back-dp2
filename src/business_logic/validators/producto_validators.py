@@ -115,7 +115,7 @@ class ProductoValidator:
             raise InvalidPriceError("Price cannot exceed 999999.99")
 
         # Check decimal places (max 2)
-        if decimal_price.as_tuple().exponent < -2:
+        if int(decimal_price.as_tuple().exponent) < -2:
             raise InvalidPriceError("Price cannot have more than 2 decimal places")
 
     @staticmethod

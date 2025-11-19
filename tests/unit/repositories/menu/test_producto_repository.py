@@ -34,7 +34,7 @@ from src.models.menu.producto_model import ProductoModel
 @pytest.mark.asyncio
 async def test_get_by_id():
     """
-    Verifica que el método get_by_id recupera correctamente un producto por su ID.
+    Verifica que el método get_by_id recupera correctamente un producto por su ID con alérgenos.
 
     PRECONDICIONES:
         - Se debe tener una instancia mock de AsyncSession.
@@ -49,17 +49,27 @@ async def test_get_by_id():
         - El método debe retornar un objeto ProductoModel cuando existe el producto.
         - El método debe retornar None cuando no existe el producto.
         - La consulta SQL debe formarse correctamente.
+        - El método debe cargar los alérgenos del producto.
     """
     # Arrange
     mock_session = AsyncMock(spec=AsyncSession)
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.first.return_value = ProductoModel(
+
+    # Mock para el producto
+    mock_producto_result = MagicMock()
+    producto = ProductoModel(
         id=str(ULID()),
         id_categoria=str(ULID()),
         nombre="Hamburguesa",
         precio_base=Decimal("12.50")
     )
-    mock_session.execute.return_value = mock_result
+    mock_producto_result.scalars.return_value.first.return_value = producto
+
+    # Mock para los alérgenos (segunda query)
+    mock_alergenos_result = MagicMock()
+    mock_alergenos_result.scalars.return_value.all.return_value = []
+
+    # Configurar execute para retornar diferentes resultados en cada llamada
+    mock_session.execute.side_effect = [mock_producto_result, mock_alergenos_result]
 
     producto_id = str(ULID())
     repository = ProductoRepository(mock_session)
@@ -70,10 +80,15 @@ async def test_get_by_id():
     # Assert
     assert result is not None
     assert isinstance(result, ProductoModel)
-    mock_session.execute.assert_called_once()
+    assert hasattr(result, '_alergenos')
+    # assert result._alergenos == []
+    # Ahora se llama 2 veces: una para el producto, otra para los alérgenos
+    assert mock_session.execute.call_count == 2
 
     # Prueba de caso negativo
-    mock_result.scalars.return_value.first.return_value = None
+    mock_session.execute.reset_mock()
+    mock_producto_result.scalars.return_value.first.return_value = None
+    mock_session.execute.side_effect = [mock_producto_result]
     result = await repository.get_by_id(producto_id)
     assert result is None
 

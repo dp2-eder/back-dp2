@@ -314,7 +314,7 @@ def test_list_producto_opciones_success(
     assert response.status_code == 200
     assert response.json()["total"] == 2
     assert len(response.json()["items"]) == 2
-    mock_producto_opcion_service.get_producto_opciones.assert_awaited_once_with(0, 10)
+    mock_producto_opcion_service.get_producto_opciones.assert_awaited_once_with(0, 10, None, None)
 
 
 def test_list_producto_opciones_validation_error(

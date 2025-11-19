@@ -25,7 +25,7 @@ class AlergenoModel(BaseModel, AuditMixin):
 
     Attributes
     ----------
-    id : UUID
+    id : str
         Identificador único del alérgeno (clave primaria, heredado de BaseModel).
     nombre : str
         Nombre del alérgeno (ej: Gluten, Lactosa, Mariscos), debe ser único.
@@ -47,7 +47,7 @@ class AlergenoModel(BaseModel, AuditMixin):
         Usuario que realizó la última modificación (heredado de AuditMixin).
     """
 
-    __tablename__ = "alergeno"
+    __tablename__ = "alergenos"
 
     # Columnas específicas del modelo de alérgeno
     nombre: Mapped[str] = mapped_column(

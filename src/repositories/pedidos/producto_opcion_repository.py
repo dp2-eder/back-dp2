@@ -3,7 +3,6 @@ Repositorio para la gestión de opciones de productos en el sistema.
 """
 
 from typing import Optional, List, Tuple
-from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,13 +63,14 @@ class ProductoOpcionRepository:
             await self.session.rollback()
             raise
 
-    async def get_by_id(self, producto_opcion_id: UUID) -> Optional[ProductoOpcionModel]:
+    async def get_by_id(self, producto_opcion_id: str) -> Optional[ProductoOpcionModel]:
+
         """
         Obtiene una opción de producto por su identificador único.
 
         Parameters
         ----------
-        producto_opcion_id : UUID
+        producto_opcion_id : str
             Identificador único de la opción de producto a buscar.
 
         Returns
@@ -82,13 +82,13 @@ class ProductoOpcionRepository:
         result = await self.session.execute(query)
         return result.scalars().first()
 
-    async def delete(self, producto_opcion_id: UUID) -> bool:
+    async def delete(self, producto_opcion_id: str) -> bool:
         """
         Elimina una opción de producto de la base de datos por su ID.
 
         Parameters
         ----------
-        producto_opcion_id : UUID
+        producto_opcion_id : str
             Identificador único de la opción de producto a eliminar.
 
         Returns
@@ -110,13 +110,13 @@ class ProductoOpcionRepository:
             await self.session.rollback()
             raise
 
-    async def update(self, producto_opcion_id: UUID, **kwargs) -> Optional[ProductoOpcionModel]:
+    async def update(self, producto_opcion_id: str, **kwargs) -> Optional[ProductoOpcionModel]:
         """
         Actualiza una opción de producto existente con los valores proporcionados.
 
         Parameters
         ----------
-        producto_opcion_id : UUID
+        producto_opcion_id : str
             Identificador único de la opción de producto a actualizar.
         **kwargs
             Campos y valores a actualizar.

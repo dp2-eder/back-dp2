@@ -8,9 +8,8 @@ Adaptado para coincidir con el esquema de MySQL restaurant_dp2.producto_alergeno
 
 from typing import Any, Dict, Optional, Type, TypeVar
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Boolean, Enum, ForeignKey, Index, inspect
+from sqlalchemy import String, Boolean, Enum, ForeignKey, Index, UniqueConstraint, inspect
 from datetime import datetime
-from uuid import UUID
 from src.models.base_model import BaseModel
 from src.models.mixins.audit_mixin import AuditMixin
 from src.core.enums.alergeno_enums import NivelPresencia
@@ -26,15 +25,17 @@ class ProductoAlergenoModel(BaseModel, AuditMixin):
     en cada producto del menú, con información adicional sobre el nivel de presencia
     (contiene, trazas, puede contener).
 
-    Esta tabla usa clave primaria compuesta (id_producto, id_alergeno), por lo que
-    NO hereda el campo 'id' de BaseModel.
+    Esta tabla ahora usa clave primaria simple (id) heredada de BaseModel,
+    con UniqueConstraint en (id_producto, id_alergeno) para evitar duplicados.
 
     Attributes
     ----------
-    id_producto : UUID
-        Identificador del producto (parte de la clave primaria compuesta).
-    id_alergeno : UUID
-        Identificador del alérgeno (parte de la clave primaria compuesta).
+    id : str
+        Identificador único ULID (heredado de BaseModel).
+    id_producto : str
+        Identificador del producto (FK).
+    id_alergeno : str
+        Identificador del alérgeno (FK).
     nivel_presencia : NivelPresencia
         Nivel de presencia del alérgeno: contiene, trazas, puede_contener.
     notas : str, optional
@@ -47,18 +48,18 @@ class ProductoAlergenoModel(BaseModel, AuditMixin):
         Fecha y hora de última modificación.
     """
 
-    __tablename__ = "producto_alergeno"
+    __tablename__ = "productos_alergenos"
 
-    # Claves foráneas que forman la clave primaria compuesta
-    id_producto: Mapped[UUID] = mapped_column(
-        ForeignKey("producto.id", ondelete="CASCADE"),
-        primary_key=True,
-        nullable=False
+    # Claves foráneas (ya NO son primary keys)
+    id_producto: Mapped[str] = mapped_column(
+        ForeignKey("productos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
     )
-    id_alergeno: Mapped[UUID] = mapped_column(
-        ForeignKey("alergeno.id", ondelete="RESTRICT"),
-        primary_key=True,
-        nullable=False
+    id_alergeno: Mapped[str] = mapped_column(
+        ForeignKey("alergenos.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True
     )
 
     # Columnas específicas del modelo
@@ -82,8 +83,9 @@ class ProductoAlergenoModel(BaseModel, AuditMixin):
 
     # Los campos de auditoría se heredan de AuditMixin
 
-    # Índices adicionales para mejorar búsquedas
+    # UniqueConstraint para evitar duplicados + Índices para mejorar búsquedas
     __table_args__ = (
+        UniqueConstraint('id_producto', 'id_alergeno', name='uq_producto_alergeno'),
         Index('idx_producto', 'id_producto'),
         Index('idx_alergeno', 'id_alergeno'),
     )
@@ -129,7 +131,7 @@ class ProductoAlergenoModel(BaseModel, AuditMixin):
             Diccionario con los datos para actualizar la instancia.
         """
         for key, value in data.items():
-            if hasattr(self, key) and key not in ('id_producto', 'id_alergeno'):
+            if hasattr(self, key) and key not in ('id', 'id_producto', 'id_alergeno'):
                 setattr(self, key, value)
 
     def __repr__(self) -> str:
@@ -141,7 +143,8 @@ class ProductoAlergenoModel(BaseModel, AuditMixin):
             Representación string del objeto ProductoAlergenoModel.
         """
         return (
-            f"<ProductoAlergenoModel(id_producto={self.id_producto}, "
+            f"<ProductoAlergenoModel(id={self.id}, "
+            f"id_producto={self.id_producto}, "
             f"id_alergeno={self.id_alergeno}, "
             f"nivel_presencia='{self.nivel_presencia.value}', activo={self.activo})>"
         )

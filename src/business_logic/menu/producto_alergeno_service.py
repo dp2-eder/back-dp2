@@ -2,6 +2,7 @@
 Servicio para la gestión de relaciones producto-alérgeno en el sistema.
 """
 
+from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -89,10 +90,45 @@ class ProductoAlergenoService:
             )
 
     async def get_producto_alergeno_by_id(
+        self, id: str
+    ) -> ProductoAlergenoResponse:
+        """
+        Obtiene una relación producto-alérgeno por su ID simple (ULID).
+
+        Parameters
+        ----------
+        id : str
+            Identificador único ULID de la relación.
+
+        Returns
+        -------
+        ProductoAlergenoResponse
+            Esquema de respuesta con los datos de la relación.
+
+        Raises
+        ------
+        ProductoAlergenoNotFoundError
+            Si no se encuentra la relación con el ID proporcionado.
+        """
+        # Buscar la relación por su ID
+        producto_alergeno = await self.repository.get_by_id(id)
+
+        # Verificar si existe
+        if not producto_alergeno:
+            raise ProductoAlergenoNotFoundError(
+                f"No se encontró la relación con ID {id}"
+            )
+
+        # Convertir y retornar como esquema de respuesta
+        return ProductoAlergenoResponse.model_validate(producto_alergeno)
+
+    async def get_producto_alergeno_by_combination(
         self, id_producto: str, id_alergeno: str
     ) -> ProductoAlergenoResponse:
         """
-        Obtiene una relación producto-alérgeno por su clave primaria compuesta.
+        Obtiene una relación producto-alérgeno por combinación (backward compatibility).
+
+        LEGACY METHOD: Usar get_producto_alergeno_by_id() para nuevas implementaciones.
 
         Parameters
         ----------
@@ -112,7 +148,7 @@ class ProductoAlergenoService:
             Si no se encuentra la relación con los IDs proporcionados.
         """
         # Buscar la relación por su clave compuesta
-        producto_alergeno = await self.repository.get_by_id(id_producto, id_alergeno)
+        producto_alergeno = await self.repository.get_by_producto_alergeno(id_producto, id_alergeno)
 
         # Verificar si existe
         if not producto_alergeno:
@@ -125,11 +161,45 @@ class ProductoAlergenoService:
         return ProductoAlergenoResponse.model_validate(producto_alergeno)
 
     async def delete_producto_alergeno(
+        self, id: str
+    ) -> bool:
+        """
+        Elimina una relación producto-alérgeno por su ID simple (ULID).
+
+        Parameters
+        ----------
+        id : str
+            Identificador único ULID de la relación.
+
+        Returns
+        -------
+        bool
+            True si la relación fue eliminada correctamente.
+
+        Raises
+        ------
+        ProductoAlergenoNotFoundError
+            Si no se encuentra la relación con el ID proporcionado.
+        """
+        # Verificar primero si la relación existe
+        producto_alergeno = await self.repository.get_by_id(id)
+        if not producto_alergeno:
+            raise ProductoAlergenoNotFoundError(
+                f"No se encontró la relación con ID {id}"
+            )
+
+        # Eliminar la relación
+        result = await self.repository.delete(id)
+        return result
+
+    async def delete_producto_alergeno_by_combination(
         self, id_producto: str, id_alergeno: str
     ) -> bool:
         """
-        Elimina una relación producto-alérgeno por su clave primaria compuesta.
-        
+        Elimina una relación por combinación (backward compatibility).
+
+        LEGACY METHOD: Usar delete_producto_alergeno() para nuevas implementaciones.
+
         Parameters
         ----------
         id_producto : str
@@ -148,7 +218,7 @@ class ProductoAlergenoService:
             Si no se encuentra la relación con los IDs proporcionados.
         """
         # Verificar primero si la relación existe
-        producto_alergeno = await self.repository.get_by_id(id_producto, id_alergeno)
+        producto_alergeno = await self.repository.get_by_producto_alergeno(id_producto, id_alergeno)
         if not producto_alergeno:
             raise ProductoAlergenoNotFoundError(
                 f"No se encontró la relación entre producto {id_producto} "
@@ -156,7 +226,7 @@ class ProductoAlergenoService:
             )
 
         # Eliminar la relación
-        result = await self.repository.delete(id_producto, id_alergeno)
+        result = await self.repository.delete_by_producto_alergeno(id_producto, id_alergeno)
         return result
 
     async def get_producto_alergenos(
@@ -198,14 +268,99 @@ class ProductoAlergenoService:
         # Retornar esquema de lista
         return ProductoAlergenoList(items=producto_alergeno_summaries, total=total)
 
+    async def get_alergenos_by_producto(self, id_producto: str) -> List:
+        """
+        Obtiene todos los alérgenos asociados a un producto específico.
+
+        Parameters
+        ----------
+        id_producto : str
+            Identificador único del producto (ULID).
+
+        Returns
+        -------
+        List[AlergenoResponse]
+            Lista de alérgenos asociados al producto.
+
+        Raises
+        ------
+        ProductoAlergenoValidationError
+            Si los parámetros de entrada no son válidos.
+        """
+        if not id_producto:
+            raise ProductoAlergenoValidationError(
+                "El ID del producto es requerido"
+            )
+
+        # Obtener alérgenos desde el repositorio
+        alergenos = await self.repository.get_alergenos_by_producto(id_producto)
+
+        # Convertir modelos a esquemas de respuesta
+        # Importación tardía para evitar referencias circulares
+        try:
+            from src.api.schemas.alergeno_schema import AlergenoResponse
+            return [AlergenoResponse.model_validate(alergeno) for alergeno in alergenos]
+        except ImportError as e:
+            # Si hay problema con el schema, devolver diccionarios simples
+            return [alergeno.to_dict() for alergeno in alergenos]
+
     async def update_producto_alergeno(
+        self,
+        id: str,
+        producto_alergeno_data: ProductoAlergenoUpdate,
+    ) -> ProductoAlergenoResponse:
+        """
+        Actualiza una relación producto-alérgeno existente por su ID simple (ULID).
+
+        Parameters
+        ----------
+        id : str
+            Identificador único ULID de la relación.
+        producto_alergeno_data : ProductoAlergenoUpdate
+            Datos para actualizar la relación.
+
+        Returns
+        -------
+        ProductoAlergenoResponse
+            Esquema de respuesta con los datos de la relación actualizada.
+
+        Raises
+        ------
+        ProductoAlergenoNotFoundError
+            Si no se encuentra la relación con el ID proporcionado.
+        """
+        # Convertir el esquema de actualización a un diccionario,
+        # excluyendo valores None (campos no proporcionados para actualizar)
+        update_data = producto_alergeno_data.model_dump(exclude_none=True)
+
+        if not update_data:
+            # Si no hay datos para actualizar, simplemente retornar la relación actual
+            return await self.get_producto_alergeno_by_id(id)
+
+        # Actualizar la relación
+        updated_producto_alergeno = await self.repository.update(
+            id, **update_data
+        )
+
+        # Verificar si la relación fue encontrada
+        if not updated_producto_alergeno:
+            raise ProductoAlergenoNotFoundError(
+                f"No se encontró la relación con ID {id}"
+            )
+
+        # Convertir y retornar como esquema de respuesta
+        return ProductoAlergenoResponse.model_validate(updated_producto_alergeno)
+
+    async def update_producto_alergeno_by_combination(
         self,
         id_producto: str,
         id_alergeno: str,
         producto_alergeno_data: ProductoAlergenoUpdate,
     ) -> ProductoAlergenoResponse:
         """
-        Actualiza una relación producto-alérgeno existente.
+        Actualiza una relación por combinación (backward compatibility).
+
+        LEGACY METHOD: Usar update_producto_alergeno() para nuevas implementaciones.
 
         Parameters
         ----------
@@ -232,10 +387,10 @@ class ProductoAlergenoService:
 
         if not update_data:
             # Si no hay datos para actualizar, simplemente retornar la relación actual
-            return await self.get_producto_alergeno_by_id(id_producto, id_alergeno)
+            return await self.get_producto_alergeno_by_combination(id_producto, id_alergeno)
 
         # Actualizar la relación
-        updated_producto_alergeno = await self.repository.update(
+        updated_producto_alergeno = await self.repository.update_by_producto_alergeno(
             id_producto, id_alergeno, **update_data
         )
 

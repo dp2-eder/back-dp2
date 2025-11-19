@@ -39,7 +39,7 @@ class RolModel(BaseModel, AuditMixin):
         Usuario que realizó la última modificación (heredado de AuditableModel).
     """
 
-    __tablename__ = "rol"
+    __tablename__ = "roles"
 
     # Columnas específicas del modelo de rol
     nombre: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)

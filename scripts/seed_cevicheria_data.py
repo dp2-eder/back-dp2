@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from src.core.database import BaseModel
-from src.models.auth.rol_model import RolModel
+# from src.models.auth.rol_model import RolModel  # ELIMINADO: Ya no se usa RolModel
 from src.models.menu.categoria_model import CategoriaModel
 from src.models.menu.alergeno_model import AlergenoModel
 from src.models.menu.producto_model import ProductoModel
@@ -50,7 +50,7 @@ class CevicheriaSeeder:
     
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.roles = {}
+        # self.roles = {}  # ELIMINADO: Ya no se usan roles
         self.categorias = {}
         self.alergenos = {}
         self.productos = {}
@@ -60,63 +60,26 @@ class CevicheriaSeeder:
     async def seed_all(self):
         """Ejecuta todos los seeders en orden."""
         print("🌊 Iniciando seed de datos para Cevichería...\n")
-        
-        await self.seed_roles()
+
+        # await self.seed_roles()  # ELIMINADO: Ya no se usan roles
         await self.seed_categorias()
         await self.seed_alergenos()
         await self.seed_productos()
         await self.seed_productos_alergenos()
         await self.seed_tipos_opciones()
         await self.seed_productos_opciones()
-        
+
         print("\n✅ ¡Seed completado exitosamente!")
-        print(f"   - {len(self.roles)} roles")
+        # print(f"   - {len(self.roles)} roles")  # ELIMINADO
         print(f"   - {len(self.categorias)} categorías")
         print(f"   - {len(self.alergenos)} alérgenos")
         print(f"   - {len(self.productos)} productos")
         print(f"   - {len(self.tipos_opciones)} tipos de opciones")
         print(f"   - {len(self.productos_opciones)} opciones de productos")
     
-    async def seed_roles(self):
-        """Crea roles del sistema."""
-        print("👥 Creando roles...")
-        
-        roles_data = [
-            {
-                "nombre": "Administrador",
-                "descripcion": "Acceso completo al sistema, gestión de usuarios y configuración",
-                "activo": True
-            },
-            {
-                "nombre": "Mesero",
-                "descripcion": "Toma pedidos, gestiona mesas y atiende clientes",
-                "activo": True
-            },
-            {
-                "nombre": "Cocinero",
-                "descripcion": "Prepara los platos y gestiona el inventario de cocina",
-                "activo": True
-            },
-            {
-                "nombre": "Cajero",
-                "descripcion": "Procesa pagos y cierre de caja",
-                "activo": True
-            },
-            {
-                "nombre": "Cliente",
-                "descripcion": "Cliente registrado con acceso a pedidos online",
-                "activo": True
-            }
-        ]
-        
-        for data in roles_data:
-            rol = RolModel(**data)
-            self.session.add(rol)
-            self.roles[data["nombre"]] = rol
-            print(f"   ✓ {data['nombre']}")
-        
-        await self.session.commit()
-        print(f"   → {len(roles_data)} roles creados\n")
+    # MÉTODO ELIMINADO: seed_roles()
+    # Ya no se crean roles porque RolModel fue eliminado del sistema.
+    # El nuevo sistema de login simplificado no usa roles.
     
     async def seed_categorias(self):
         """Crea categorías de productos."""

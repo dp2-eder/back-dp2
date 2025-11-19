@@ -315,7 +315,7 @@ def test_list_productos_success(
     assert response.status_code == 200
     assert response.json()["total"] == 2
     assert len(response.json()["items"]) == 2
-    mock_producto_service.get_productos.assert_awaited_once_with(0, 10, None)
+    mock_producto_service.get_productos.assert_awaited_once_with(0, 10, None, None, None)
 
 
 def test_list_productos_validation_error(
@@ -395,7 +395,7 @@ def test_list_productos_with_categoria_filter(
     assert response.status_code == 200
     assert response.json()["total"] == 1
     assert len(response.json()["items"]) == 1
-    mock_producto_service.get_productos.assert_awaited_once_with(0, 10, id_categoria)
+    mock_producto_service.get_productos.assert_awaited_once_with(0, 10, id_categoria, None, None)
 
 
 def test_update_producto_success(

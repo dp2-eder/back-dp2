@@ -70,7 +70,7 @@ class CategoriaRepository:
 
         Parameters
         ----------
-        categoria_id : UUID
+        categoria_id : str
             Identificador único de la categoría a buscar.
 
         Returns
@@ -106,7 +106,7 @@ class CategoriaRepository:
 
         Parameters
         ----------
-        categoria_id : UUID
+        categoria_id : str
             Identificador único de la categoría a eliminar.
 
         Returns
@@ -134,7 +134,7 @@ class CategoriaRepository:
 
         Parameters
         ----------
-        categoria_id : UUID
+        categoria_id : str
             Identificador único de la categoría a actualizar.
         **kwargs
             Campos y valores a actualizar.

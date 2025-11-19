@@ -69,7 +69,7 @@ class RolRepository:
 
         Parameters
         ----------
-        rol_id : UUID
+        rol_id : str
             Identificador único del rol a buscar.
 
         Returns
@@ -87,7 +87,7 @@ class RolRepository:
 
         Parameters
         ----------
-        rol_id : UUID
+        rol_id : str
             Identificador único del rol a eliminar.
 
         Returns
@@ -115,7 +115,7 @@ class RolRepository:
 
         Parameters
         ----------
-        rol_id : UUID
+        rol_id : str
             Identificador único del rol a actualizar.
         **kwargs
             Campos y valores a actualizar.

@@ -17,6 +17,11 @@ from src.main import app
 from src.core.database import get_database_session as get_db, DatabaseManager
 from src.models.base_model import BaseModel as Base
 
+# Importar TODOS los modelos al inicio para registrarlos con SQLAlchemy
+# Esto es necesario para que los tests unitarios que instancian modelos directamente funcionen
+from src.models.pagos.division_cuenta_model import DivisionCuentaModel  # noqa: F401
+from src.models.pagos.division_cuenta_detalle_model import DivisionCuentaDetalleModel  # noqa: F401
+
 # Inicializar Faker para español
 fake = Faker('es_ES')
 
@@ -63,7 +68,15 @@ async def test_db_manager():
     test_db = TestDatabaseManager()
 
     # Importamos los modelos para registrarlos con Base
-    from src.models.auth.rol_model import RolModel  # noqa: F401
+    # from src.models.auth.rol_model import RolModel  # noqa: F401  # ELIMINADO: Ya no existe RolModel
+    from src.models.pagos.division_cuenta_model import DivisionCuentaModel  # noqa: F401
+    from src.models.pagos.division_cuenta_detalle_model import DivisionCuentaDetalleModel  # noqa: F401
+    from src.models.auth.usuario_model import UsuarioModel  # noqa: F401
+    from src.models.mesas.mesa_model import MesaModel  # noqa: F401
+    from src.models.mesas.local_model import LocalModel  # noqa: F401
+    from src.models.mesas.zona_model import ZonaModel  # noqa: F401
+    from src.models.mesas.sesion_mesa_model import SesionMesaModel  # noqa: F401
+    from src.models.mesas.usuario_sesion_mesa_model import UsuarioSesionMesaModel  # noqa: F401
 
     # Creamos las tablas
     async with test_db.engine.begin() as conn:
@@ -141,46 +154,29 @@ def cleanup_app():
 # FAKE DATA GENERATORS - Para crear datos de prueba reutilizables
 # ============================================================================
 
-@pytest.fixture
-def fake_rol_data():
-    """
-    Genera datos fake para un Rol.
-    
-    Returns:
-        dict: Datos de rol con valores fake realistas
-    
-    Uso:
-        def test_ejemplo(fake_rol_data):
-            rol = RolModel(**fake_rol_data)
-    """
-    return {
-        "id": str(ULID()),
-        "nombre": fake.job()[:50],  # Máximo 50 caracteres
-        "descripcion": fake.text(max_nb_chars=200),
-        "activo": True,
-    }
+# FIXTURE ELIMINADA: fake_rol_data
+# Ya no existe RolModel en el sistema
+# @pytest.fixture
+# def fake_rol_data():
+#     ...
 
 
 @pytest.fixture
-def fake_usuario_data(fake_rol_data):
+def fake_usuario_data():
     """
-    Genera datos fake para un Usuario.
-    
+    Genera datos fake para un Usuario (simplificado).
+
     Returns:
         dict: Datos de usuario con valores fake realistas
-    
+
     Uso:
         def test_ejemplo(fake_usuario_data):
             usuario = UsuarioModel(**fake_usuario_data)
     """
     return {
         "id": str(ULID()),
-        "id_rol": fake_rol_data["id"],
         "email": fake.email(),
-        "password_hash": fake.sha256(),
         "nombre": fake.name(),
-        "telefono": fake.phone_number()[:20],  # Máximo 20 caracteres
-        "activo": True,
         "ultimo_acceso": fake.date_time_this_year(),
     }
 

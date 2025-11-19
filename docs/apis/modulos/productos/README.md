@@ -24,7 +24,8 @@ Gestión completa de productos del menú. Permite crear, listar, consultar, actu
 ### Vistas Especializadas
 - **[GET /productos/cards](endpoints/GET_productos_cards.md)** — Lista **todos** los productos en formato card
 - **[GET /productos/categoria/{categoria_id}/cards](endpoints/GET_productos_categoria_categoria_id_cards.md)** — Lista productos **por categoría** en formato card
-- **[GET /productos/{producto_id}/opciones](endpoints/GET_productos_producto_id_opciones.md)** — Obtiene producto con sus opciones agrupadas por tipo
+- **[GET /productos/{producto_id}/opciones](endpoints/GET_productos_producto_id_opciones.md)** — ⭐ Obtiene producto con sus **opciones** agrupadas por tipo
+- **[GET /productos/{producto_id}/alergenos](endpoints/GET_productos_producto_id_alergenos.md)** — ⭐ Obtiene **alérgenos** de un producto
 
 ## Schema Principal
 

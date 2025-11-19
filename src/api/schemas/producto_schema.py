@@ -3,7 +3,6 @@ Pydantic schemas for Producto (Product) entities.
 """
 
 from typing import Optional, ClassVar, List, TYPE_CHECKING
-# UUID removed - using str for ULID compatibility
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
@@ -66,12 +65,13 @@ class ProductoUpdate(BaseModel):
 class ProductoResponse(ProductoBase):
     """Schema for producto responses."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
 
     id: str = Field(description="Product ID")
     id_categoria: str = Field(description="Category ID")
     disponible: bool = Field(description="Indicates if the product is available")
     destacado: bool = Field(description="Indicates if the product is featured")
+    alergenos: List["AlergenoInfo"] = Field(default=[], description="List of allergens")
     fecha_creacion: Optional[datetime] = Field(
         default=None, description="Creation timestamp"
     )
@@ -156,11 +156,22 @@ class ProductoConOpcionesResponse(ProductoResponse):
     )
 
 
+class AlergenoInfo(BaseModel):
+    """Schema for alergeno information in products."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+    id: str = Field(description="Alergeno ID")
+    nombre: str = Field(description="Alergeno name")
+    icono: Optional[str] = Field(default=None, description="Alergeno icon")
+    nivel_riesgo: str = Field(description="Risk level")
+
+
 class CategoriaInfo(BaseModel):
     """Schema for categoria information in product cards."""
-    
+
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
-    
+
     id: str = Field(description="Category ID")
     nombre: str = Field(description="Category name")
     imagen_path: Optional[str] = Field(default=None, description="Category image path")

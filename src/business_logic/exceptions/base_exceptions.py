@@ -6,7 +6,7 @@ Base business exceptions.
 class BusinessError(Exception):
     """Base exception for business logic errors."""
 
-    def __init__(self, message: str, error_code: str = None):
+    def __init__(self, message: str, error_code: str | None = None):
         """
         Initialize business error.
 

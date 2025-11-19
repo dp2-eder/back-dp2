@@ -2,7 +2,7 @@
 Endpoints para gestión de tipos de opciones.
 """
 
-from uuid import UUID
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,14 +109,23 @@ async def list_tipos_opciones(
     limit: int = Query(
         100, gt=0, le=500, description="Número máximo de registros a retornar"
     ),
+    id_mesa: Optional[str] = Query(None, description="ID de mesa (filtra por local de la mesa)"),
+    id_local: Optional[str] = Query(None, description="ID de local (filtro directo)"),
     session: AsyncSession = Depends(get_database_session),
 ) -> TipoOpcionList:
     """
     Obtiene una lista paginada de tipos de opciones.
-    
+
+    Ejemplos:
+    - GET /tipos-opciones → Todos los tipos de opciones
+    - GET /tipos-opciones?id_mesa=abc123 → Tipos de opciones del local de la mesa
+    - GET /tipos-opciones?id_local=xyz789 → Tipos de opciones del local específico
+
     Args:
         skip: Número de registros a omitir (offset), por defecto 0.
         limit: Número máximo de registros a retornar, por defecto 100.
+        id_mesa: ID de mesa para filtrar por su local (el backend resuelve local automáticamente).
+        id_local: ID de local para filtrar directamente.
         session: Sesión de base de datos.
 
     Returns:
@@ -124,12 +133,12 @@ async def list_tipos_opciones(
 
     Raises:
         HTTPException:
-            - 400: Si los parámetros de paginación son inválidos.
+            - 400: Si los parámetros de paginación son inválidos o la mesa no tiene local.
             - 500: Si ocurre un error interno del servidor.
     """
     try:
         tipo_opcion_service = TipoOpcionService(session)
-        return await tipo_opcion_service.get_tipos_opciones(skip, limit)
+        return await tipo_opcion_service.get_tipos_opciones(skip, limit, id_mesa, id_local)
     except TipoOpcionValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:

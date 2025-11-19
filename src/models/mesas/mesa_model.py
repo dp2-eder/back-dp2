@@ -1,10 +1,13 @@
-from sqlalchemy import Integer, String, Boolean, inspect, Enum as SQLEnum
-from typing import Any, Dict, Type, TypeVar
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Integer, String, Boolean, inspect, Enum as SQLEnum, ForeignKey
+from typing import Any, Dict, Type, TypeVar, TYPE_CHECKING, Optional
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.declarative import declarative_base
 from src.models.mixins.audit_mixin import AuditMixin
 from src.models.base_model import BaseModel
 from src.core.enums.mesa_enums import EstadoMesa
+
+if TYPE_CHECKING:
+    from src.models.mesas.zona_model import ZonaModel
 
 # Definimos un TypeVar para el tipado genérico
 T = TypeVar("T", bound="MesaModel")
@@ -24,8 +27,8 @@ class MesaModel(BaseModel, AuditMixin):
         Número de la mesa, debe ser único en el sistema.
     capacidad : int, optional
         Capacidad de la mesa.
-    zona : int, optional
-        Zona donde se encuentra la mesa.
+    id_zona : str, optional
+        ID de la zona donde se encuentra la mesa (Foreign Key).
     qr_code : str, optional
         Código QR asociado a la mesa para identificación rápida.
     activo : bool
@@ -45,10 +48,19 @@ class MesaModel(BaseModel, AuditMixin):
     # Columnas específicas del modelo Mesa
     numero: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     capacidad: Mapped[int] = mapped_column(Integer, nullable=True)
-    zona: Mapped[str] = mapped_column(String(50), nullable=True)
+    id_zona: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("zonas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     nota: Mapped[str] = mapped_column(String(255), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     estado: Mapped[EstadoMesa] = mapped_column(SQLEnum(EstadoMesa), nullable=False, default=EstadoMesa.DISPONIBLE)
+
+    # Relación con Zona
+    zona: Mapped[Optional["ZonaModel"]] = relationship(
+        "ZonaModel",
+        back_populates="mesas",
+        lazy="selectin"
+    )
 
     # Métodos comunes para todos los modelos
     def to_dict(self) -> Dict[str, Any]:
@@ -95,5 +107,4 @@ class MesaModel(BaseModel, AuditMixin):
                 setattr(self, key, value)
 
     def __repr__(self):
-        return f"<Mesa(id={self.id}, numero={self.numero}, zona={self.zona}, capacidad={self.capacidad})>"
-    
+        return f"<Mesa(id={self.id}, numero={self.numero}, id_zona={self.id_zona}, capacidad={self.capacidad})>"

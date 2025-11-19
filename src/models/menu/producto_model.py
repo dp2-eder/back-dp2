@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional, Type, TypeVar, TYPE_CHECKING, List
 from decimal import Decimal
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Boolean, Text, DECIMAL, ForeignKey, Index
-from uuid import UUID
 from src.models.base_model import BaseModel
 from src.models.mixins.audit_mixin import AuditMixin
 
@@ -30,7 +29,7 @@ class ProductoModel(BaseModel, AuditMixin):
 
     Attributes
     ----------
-    id_categoria : UUID
+    id_categoria : str
         Identificador de la categoría a la que pertenece el producto.
     nombre : str
         Nombre del producto/plato.
@@ -56,11 +55,11 @@ class ProductoModel(BaseModel, AuditMixin):
         Usuario que realizó la última modificación (heredado de AuditMixin).
     """
 
-    __tablename__ = "producto"
+    __tablename__ = "productos"
 
     # Foreign Key - Relación con categoría
-    id_categoria: Mapped[UUID] = mapped_column(
-        ForeignKey("categoria.id", ondelete="RESTRICT"),
+    id_categoria: Mapped[str] = mapped_column(
+        ForeignKey("categorias.id", ondelete="RESTRICT"),
         nullable=False,
         index=True
     )

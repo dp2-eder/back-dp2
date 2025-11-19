@@ -14,6 +14,44 @@ from src.core.config import get_settings
 from src.core.logging import configure_logging
 from src.core.dependencies import ErrorHandlerMiddleware
 
+# ======================= SOLUCION AL ERROR DE MAPPER =======================
+# Importar TODOS los modelos aqui para registrarlos en SQLAlchemy
+# ANTES de que cualquier controlador sea importado.
+# Esto resuelve el error: failed to locate a name DivisionCuentaModel
+
+# Auth models
+# from src.models.auth.rol_model import RolModel  # noqa: F401  # ELIMINADO: Ya no se usa RolModel
+from src.models.auth.usuario_model import UsuarioModel  # noqa: F401
+from src.models.auth.sesion_model import SesionModel  # noqa: F401
+
+# Menu models
+from src.models.menu.categoria_model import CategoriaModel  # noqa: F401
+from src.models.menu.alergeno_model import AlergenoModel  # noqa: F401
+from src.models.menu.producto_model import ProductoModel  # noqa: F401
+from src.models.menu.producto_alergeno_model import ProductoAlergenoModel  # noqa: F401
+
+# Mesas models
+from src.models.mesas.local_model import LocalModel  # noqa: F401
+from src.models.mesas.zona_model import ZonaModel  # noqa: F401
+from src.models.mesas.mesa_model import MesaModel  # noqa: F401
+from src.models.mesas.sesion_mesa_model import SesionMesaModel  # noqa: F401
+from src.models.mesas.locales_categorias_model import LocalesCategoriasModel  # noqa: F401
+from src.models.mesas.locales_productos_model import LocalesProductosModel  # noqa: F401
+from src.models.mesas.locales_productos_opciones_model import LocalesProductosOpcionesModel  # noqa: F401
+from src.models.mesas.locales_tipos_opciones_model import LocalesTiposOpcionesModel  # noqa: F401
+
+# Pedidos models - CRITICO: importar ANTES de pagos
+from src.models.pedidos.tipo_opciones_model import TipoOpcionModel  # noqa: F401
+from src.models.pedidos.producto_opcion_model import ProductoOpcionModel  # noqa: F401
+from src.models.pedidos.pedido_model import PedidoModel  # noqa: F401
+from src.models.pedidos.pedido_producto_model import PedidoProductoModel  # noqa: F401
+from src.models.pedidos.pedido_opcion_model import PedidoOpcionModel  # noqa: F401
+
+# Pagos models - DESPUES de pedidos (por la relacion bidireccional)
+from src.models.pagos.division_cuenta_model import DivisionCuentaModel  # noqa: F401
+from src.models.pagos.division_cuenta_detalle_model import DivisionCuentaDetalleModel  # noqa: F401
+# ===========================================================================
+
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -96,11 +134,15 @@ async def lifespan(app: FastAPI):
     configure_logging()
 
     # Crear tablas en la base de datos si no existen
+    # import os
+    # if os.getenv("INIT_DB", "false").lower() == "true":
+    #     logger.info("INIT_DB=true: Creando tablas en la base de datos...")
     await create_tables()
-    
     # Pequeña espera para asegurar que las tablas estén completamente creadas
     import asyncio
     await asyncio.sleep(0.5)
+    # else:
+    #     logger.info("INIT_DB no está activado, omitiendo creación de tablas")
 
     # Ejecutar seed automáticamente si la BD está vacía
     # await auto_seed_database()
@@ -132,17 +174,32 @@ def register_routers(app: FastAPI) -> None:
     """
     # Estructura de controladores a cargar: (módulo, tag)
     controllers = [
+        ("src.api.controllers.login_controller", "Login"),  # Nuevo controlador de login simplificado
+        ("src.api.controllers.auth_controller", "Autenticación"),
         ("src.api.controllers.rol_controller", "Roles"),
+        ("src.api.controllers.local_controller", "Locales"),
+        ("src.api.controllers.zona_controller", "Zonas"),
+        ("src.api.controllers.sesion_controller", "Sesiones"),
+        ("src.api.controllers.sesion_mesa_controller", "Sesiones de Mesa"),
         ("src.api.controllers.categoria_controller", "Categorías"),
         ("src.api.controllers.alergeno_controller", "Alérgenos"),
         ("src.api.controllers.producto_controller", "Productos"),
         ("src.api.controllers.tipo_opciones_controller", "Tipos de Opciones"),
         ("src.api.controllers.producto_opcion_controller", "Producto Opciones"),
         ("src.api.controllers.sync_controller", "Sincronización"),
-        # ("src.api.controllers.usuarios_controller", "Usuarios"),
         ("src.api.controllers.mesa_controller", "Mesas"),
-        # ("src.api.controllers.pedidos_controller", "Pedidos"),
+        ("src.api.controllers.pedido_controller", "Pedidos"),
+        ("src.api.controllers.pedido_producto_controller", "Pedidos Productos"),
+        ("src.api.controllers.pedido_opcion_controller", "Pedido Opciones"),
+        # ("src.api.controllers.division_cuenta_controller", "Divisiones de Cuenta"),
+        # ("src.api.controllers.division_cuenta_detalle_controller", "Detalles de División"),
         # ("src.api.controllers.pagos_controller", "Pagos"),
+
+        # Controladores de catálogo multi-local
+        ("src.api.controllers.locales_categorias_controller", "Local - Categorías"),
+        ("src.api.controllers.locales_productos_controller", "Local - Productos"),
+        ("src.api.controllers.locales_tipos_opciones_controller", "Local - Tipos de Opciones"),
+        ("src.api.controllers.locales_productos_opciones_controller", "Local - Opciones de Productos"),
     ]
 
     # Prefijo API común para todas las rutas
@@ -156,12 +213,15 @@ def register_routers(app: FastAPI) -> None:
 
             if router and isinstance(router, APIRouter):
                 # Registrar el router con la aplicación
-                app.include_router(router, prefix=api_prefix, tags=[tag])
+                # No pasamos tags aquí porque los routers ya tienen sus tags definidos
+                app.include_router(router, prefix=api_prefix)
                 logger.info(f"Router '{tag}' registrado correctamente")
             else:
                 logger.warning(f"No se encontró un router válido en {module_name}")
         except Exception as e:
+            import traceback
             logger.error(f"Error al cargar el controlador {module_name}: {e}")
+            logger.error(f"Traceback completo:\n{traceback.format_exc()}")
 
 
 def create_app() -> FastAPI:
@@ -266,3 +326,4 @@ if __name__ == "__main__":
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )
+

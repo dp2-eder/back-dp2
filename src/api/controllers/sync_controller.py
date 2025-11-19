@@ -233,7 +233,7 @@ async def sync_platos(
     "/mesas",
     status_code=status.HTTP_200_OK,
     summary="Sincronizar mesas desde Domotica",
-    description="Recibe datos de mesas extraídos mediante scraping del sistema Domotica.",
+    description="Recibe datos de mesas extraídos mediante scraping del sistema Domotica. Crea zonas si no existen y registra mesas.",
 )
 async def sync_mesas(
     mesas_domotica: List[MesaDomotica] = Body(...),
@@ -242,7 +242,11 @@ async def sync_mesas(
     """
     Recibe y registra las mesas extraídas del sistema Domotica.
 
-    Actualmente solo confirma la recepción de los datos sin procesamiento adicional.
+    Flujo de operación:
+    1. Obtiene el local "Barra Arena" por código
+    2. Extrae zonas únicas del JSON recibido
+    3. Crea/obtiene zonas (evita duplicados)
+    4. Crea mesas con id_zona correspondiente (evita duplicados)
 
     Parameters
     ----------
@@ -254,7 +258,7 @@ async def sync_mesas(
     Returns
     -------
     Dict[str, Any]
-        Confirmación de recepción y conteo de mesas recibidas
+        Resumen de la operación con contadores de zonas y mesas creadas
 
     Raises
     ------
@@ -263,22 +267,82 @@ async def sync_mesas(
     """
     try:
         from src.business_logic.mesas.mesa_service import MesaService
+        from src.business_logic.mesas.local_service import LocalService
+        from src.business_logic.mesas.zona_service import ZonaService
         from src.api.schemas.mesa_schema import MesaCreate, EstadoMesa
+        from src.api.schemas.zona_schema import ZonaCreate
+        from src.models.mesas.zona_model import ZonaModel
+        from sqlalchemy import select
 
-        # LOG: Verificar los valores recibidos de zona
-        zonas_recibidas = [mesa.zona for mesa in mesas_domotica]
-        print(f"[SYNC MESAS] Zonas recibidas: {zonas_recibidas}")
-        logger.info(f"[SYNC MESAS] Zonas recibidas: {zonas_recibidas}")
+        # Contadores para reporte
+        resultados = {
+            "zonas_creadas": 0,
+            "zonas_existentes": 0,
+            "mesas_creadas": 0,
+            "mesas_existentes": 0,
+        }
 
-        # Transformar mesas_domotica a MesaCreate
+        # PASO 1: Obtener Local "Barra Arena"
+        local_service = LocalService(session)
+        try:
+            local = await local_service.get_local_by_codigo("BA-001")
+            logger.info(f"[SYNC MESAS] Local encontrado: {local.nombre} (ID: {local.id})")
+        except Exception as e:
+            logger.error(f"[SYNC MESAS] Error al obtener local 'BA-001': {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Local 'Barra Arena' no encontrado. Ejecute primero el enriquecimiento de datos.",
+            )
+
+        # PASO 2: Extraer zonas únicas del JSON
+        zonas_unicas = set(mesa.zona for mesa in mesas_domotica)
+        logger.info(f"[SYNC MESAS] Zonas únicas extraídas: {zonas_unicas}")
+
+        # PASO 3: Crear/Obtener zonas
+        zona_map = {}  # {nombre_zona: id_zona}
+        zona_service = ZonaService(session)
+
+        for nombre_zona in zonas_unicas:
+            # Buscar si ya existe zona con ese nombre para este local
+            result = await session.execute(
+                select(ZonaModel).where(
+                    ZonaModel.id_local == local.id,
+                    ZonaModel.nombre == nombre_zona
+                )
+            )
+            zona = result.scalars().first()
+
+            if zona:
+                # Zona ya existe
+                logger.info(f"[SYNC MESAS] Zona '{nombre_zona}' ya existe (ID: {zona.id})")
+                zona_map[nombre_zona] = zona.id
+                resultados["zonas_existentes"] += 1
+            else:
+                # Crear nueva zona
+                nueva_zona = await zona_service.create_zona(
+                    ZonaCreate(
+                        id_local=local.id,
+                        nombre=nombre_zona,
+                        descripcion=f"Zona {nombre_zona} creada desde sincronización",
+                        nivel=0,
+                        capacidad_maxima=None,
+                    )
+                )
+                logger.info(f"[SYNC MESAS] Zona '{nombre_zona}' creada (ID: {nueva_zona.id})")
+                zona_map[nombre_zona] = nueva_zona.id
+                resultados["zonas_creadas"] += 1
+
+        # PASO 4: Transformar mesas con id_zona
+        mesa_service = MesaService(session)
         mesas_a_crear = []
+
         for mesa in mesas_domotica:
-            print(f"[SYNC MESAS] Mesa recibida: nombre={mesa.nombre}, zona={mesa.zona}, nota={mesa.nota}, estado={mesa.estado}")
-            # Asignar capacidad=4 si no viene
+            # Determinar capacidad
             capacidad = getattr(mesa, "capacidad", None)
             if capacidad is None:
                 capacidad = 4
-            # Estado: respeta tal cual lo manda el sistema externo (mayúsculas/minúsculas)
+
+            # Determinar estado
             estado_str = getattr(mesa, "estado", None)
             if estado_str:
                 try:
@@ -287,37 +351,36 @@ async def sync_mesas(
                     estado = EstadoMesa.DISPONIBLE
             else:
                 estado = EstadoMesa.DISPONIBLE
+
+            # Crear MesaCreate con id_zona
             mesas_a_crear.append(
                 MesaCreate(
                     numero=mesa.nombre,
-                    zona=mesa.zona,
                     capacidad=capacidad,
+                    id_zona=zona_map[mesa.zona],
                     nota=mesa.nota if hasattr(mesa, "nota") else None,
                     estado=estado
                 )
             )
 
-        # Si no hay BD, solo mostrar lo que se recibiría
-        print(f"[SYNC MESAS] Mesas a crear: {[m.model_dump() for m in mesas_a_crear]}")
-        logger.info(f"[SYNC MESAS] Mesas a crear: {[m.model_dump() for m in mesas_a_crear]}")
+        # PASO 5: Crear mesas en batch (el servicio ya valida duplicados)
+        logger.info(f"[SYNC MESAS] Intentando crear {len(mesas_a_crear)} mesas")
+        mesas_creadas = await mesa_service.batch_create_mesas(mesas_a_crear)
+        resultados["mesas_creadas"] = len(mesas_creadas)
+        resultados["mesas_existentes"] = len(mesas_a_crear) - len(mesas_creadas)
 
-        # Si la BD está activa, guardar; si no, solo retornar los datos
-        mesas_creadas = []
-        try:
-            mesa_service = MesaService(session)
-            mesas_creadas = await mesa_service.batch_create_mesas(mesas_a_crear)
-        except Exception as db_exc:
-            print(f"[SYNC MESAS] (Sin BD) Error al guardar: {db_exc}")
-            logger.warning(f"[SYNC MESAS] (Sin BD) Error al guardar: {db_exc}")
+        logger.info(f"[SYNC MESAS] Resumen: {resultados}")
 
         return {
             "status": "success",
-            "message": f"Mesas sincronizadas correctamente: {len(mesas_creadas) if mesas_creadas else len(mesas_a_crear)} creadas (simulado si no hay BD)",
-            "mesas_creadas": [mesa.model_dump() for mesa in (mesas_creadas if mesas_creadas else mesas_a_crear)],
-            "zonas_recibidas": zonas_recibidas,
-            "total": len(mesas_creadas) if mesas_creadas else len(mesas_a_crear)
+            "message": f"Sincronización completada: {resultados['zonas_creadas']} zonas creadas, {resultados['mesas_creadas']} mesas creadas",
+            "resultados": resultados,
+            "zonas_procesadas": list(zonas_unicas),
         }
 
+    except HTTPException:
+        # Re-raise HTTPException directamente
+        raise
     except Exception as e:
         logger.exception(f"Error durante la sincronización de mesas: {str(e)}")
         raise HTTPException(

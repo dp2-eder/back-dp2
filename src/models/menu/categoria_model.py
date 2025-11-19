@@ -44,7 +44,7 @@ class CategoriaModel(BaseModel, AuditMixin):
         Usuario que realizó la última modificación (heredado de AuditMixin).
     """
 
-    __tablename__ = "categoria"
+    __tablename__ = "categorias"
 
     # Columnas específicas del modelo de categoría
     nombre: Mapped[str] = mapped_column(

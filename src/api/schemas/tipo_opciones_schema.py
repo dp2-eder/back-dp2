@@ -6,7 +6,6 @@ representar los tipos de opciones en la API.
 """
 
 from typing import Optional, ClassVar, List
-# UUID removed - using str for ULID compatibility
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -122,7 +121,7 @@ class TipoOpcionResponse(TipoOpcionBase):
     """
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
-    id: str = Field(description="Identificador único del tipo de opción (UUID).")
+    id: str = Field(description="Identificador único del tipo de opción (str).")
     fecha_creacion: Optional[datetime] = Field(
         default=None, description="Fecha y hora de creación del registro."
     )

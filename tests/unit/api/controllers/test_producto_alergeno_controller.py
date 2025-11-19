@@ -95,6 +95,7 @@ def sample_alergeno_id():
 def sample_producto_alergeno_data(sample_producto_id, sample_alergeno_id):
     """Datos de ejemplo de una relación producto-alérgeno para las pruebas."""
     return {
+        "id": str(ULID()),  # ID único de la relación
         "id_producto": str(sample_producto_id),
         "id_alergeno": str(sample_alergeno_id),
         "nivel_presencia": NivelPresencia.CONTIENE.value,
@@ -208,30 +209,29 @@ def test_get_producto_alergeno_success(
     sample_producto_id, sample_alergeno_id, sample_producto_alergeno_data
 ):
     """
-    Prueba la obtención exitosa de una relación producto-alérgeno por sus IDs.
+    Prueba la obtención exitosa de una relación producto-alérgeno por combinación de IDs.
 
     PRECONDICIONES:
         - El cliente de prueba (test_client) debe estar configurado
         - El servicio de producto-alérgeno debe estar mockeado (mock_producto_alergeno_service)
-        - Se deben tener IDs válidos (sample_producto_id, sample_alergeno_id)
         - Los datos de muestra deben estar disponibles (sample_producto_alergeno_data)
 
     PROCESO:
         - Configura el mock para simular la existencia de una relación.
-        - Realiza una solicitud GET al endpoint.
+        - Realiza una solicitud GET al endpoint con id_producto e id_alergeno.
         - Verifica la respuesta HTTP y los datos retornados.
-        
+
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 200 (OK)
         - Los datos devueltos deben coincidir con los esperados
-        - El método get_producto_alergeno_by_id del servicio debe haber sido llamado una vez
+        - El método get_producto_alergeno_by_combination del servicio debe haber sido llamado una vez
     """
     # Arrange
     with patch(
         "src.api.controllers.producto_alergeno_controller.ProductoAlergenoService"
     ) as mock_service_class:
         mock_service_class.return_value = mock_producto_alergeno_service
-        mock_producto_alergeno_service.get_producto_alergeno_by_id.return_value = (
+        mock_producto_alergeno_service.get_producto_alergeno_by_combination.return_value = (
             ProductoAlergenoResponse(**sample_producto_alergeno_data)
         )
 
@@ -244,7 +244,7 @@ def test_get_producto_alergeno_success(
         assert response.status_code == 200
         assert response.json()["id_producto"] == sample_producto_alergeno_data["id_producto"]
         assert response.json()["id_alergeno"] == sample_producto_alergeno_data["id_alergeno"]
-        mock_producto_alergeno_service.get_producto_alergeno_by_id.assert_awaited_once()
+        mock_producto_alergeno_service.get_producto_alergeno_by_combination.assert_awaited_once()
 
 
 def test_get_producto_alergeno_not_found(
@@ -267,14 +267,14 @@ def test_get_producto_alergeno_not_found(
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 404 (Not Found)
         - El mensaje de error debe indicar que no se encontró la relación
-        - El método get_producto_alergeno_by_id del servicio debe haber sido llamado una vez
+        - El método get_producto_alergeno_by_combination del servicio debe haber sido llamado una vez
     """
     # Arrange
     with patch(
         "src.api.controllers.producto_alergeno_controller.ProductoAlergenoService"
     ) as mock_service_class:
         mock_service_class.return_value = mock_producto_alergeno_service
-        mock_producto_alergeno_service.get_producto_alergeno_by_id.side_effect = (
+        mock_producto_alergeno_service.get_producto_alergeno_by_combination.side_effect = (
             ProductoAlergenoNotFoundError(
                 f"No se encontró la relación entre producto {sample_producto_id} "
                 f"y alérgeno {sample_alergeno_id}"
@@ -289,7 +289,7 @@ def test_get_producto_alergeno_not_found(
         # Assert
         assert response.status_code == 404
         assert "No se encontró la relación" in response.json()["detail"]
-        mock_producto_alergeno_service.get_producto_alergeno_by_id.assert_awaited_once()
+        mock_producto_alergeno_service.get_producto_alergeno_by_combination.assert_awaited_once()
 
 
 def test_list_producto_alergenos_success(
@@ -315,6 +315,7 @@ def test_list_producto_alergenos_success(
     """
     # Arrange
     producto_alergeno_summary = {
+        "id": str(ULID()),  # Agregar el campo id requerido
         "id_producto": str(sample_producto_id),
         "id_alergeno": str(sample_alergeno_id),
         "nivel_presencia": NivelPresencia.CONTIENE.value,
@@ -406,17 +407,17 @@ def test_update_producto_alergeno_success(
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 200 (OK)
         - Los datos devueltos deben reflejar los cambios realizados
-        - El método update_producto_alergeno del servicio debe haber sido llamado una vez
+        - El método update_producto_alergeno_by_combination del servicio debe haber sido llamado una vez
     """
     # Arrange
     update_data = {"nivel_presencia": NivelPresencia.TRAZAS.value}
     updated_data = {**sample_producto_alergeno_data, "nivel_presencia": NivelPresencia.TRAZAS.value}
-    
+
     with patch(
         "src.api.controllers.producto_alergeno_controller.ProductoAlergenoService"
     ) as mock_service_class:
         mock_service_class.return_value = mock_producto_alergeno_service
-        mock_producto_alergeno_service.update_producto_alergeno.return_value = (
+        mock_producto_alergeno_service.update_producto_alergeno_by_combination.return_value = (
             ProductoAlergenoResponse(**updated_data)
         )
 
@@ -429,7 +430,7 @@ def test_update_producto_alergeno_success(
         # Assert
         assert response.status_code == 200
         assert response.json()["nivel_presencia"] == NivelPresencia.TRAZAS.value
-        mock_producto_alergeno_service.update_producto_alergeno.assert_awaited_once()
+        mock_producto_alergeno_service.update_producto_alergeno_by_combination.assert_awaited_once()
 
 
 def test_update_producto_alergeno_not_found(
@@ -452,16 +453,16 @@ def test_update_producto_alergeno_not_found(
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 404 (Not Found)
         - El mensaje de error debe indicar que no se encontró la relación
-        - El método update_producto_alergeno del servicio debe haber sido llamado una vez
+        - El método update_producto_alergeno_by_combination del servicio debe haber sido llamado una vez
     """
     # Arrange
     update_data = {"nivel_presencia": NivelPresencia.TRAZAS.value}
-    
+
     with patch(
         "src.api.controllers.producto_alergeno_controller.ProductoAlergenoService"
     ) as mock_service_class:
         mock_service_class.return_value = mock_producto_alergeno_service
-        mock_producto_alergeno_service.update_producto_alergeno.side_effect = (
+        mock_producto_alergeno_service.update_producto_alergeno_by_combination.side_effect = (
             ProductoAlergenoNotFoundError(
                 f"No se encontró la relación entre producto {sample_producto_id} "
                 f"y alérgeno {sample_alergeno_id}"
@@ -477,7 +478,7 @@ def test_update_producto_alergeno_not_found(
         # Assert
         assert response.status_code == 404
         assert "No se encontró la relación" in response.json()["detail"]
-        mock_producto_alergeno_service.update_producto_alergeno.assert_awaited_once()
+        mock_producto_alergeno_service.update_producto_alergeno_by_combination.assert_awaited_once()
 
 
 def test_delete_producto_alergeno_success(
@@ -499,14 +500,14 @@ def test_delete_producto_alergeno_success(
         
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 204 (No Content)
-        - El método delete_producto_alergeno del servicio debe haber sido llamado una vez
+        - El método delete_producto_alergeno_by_combination del servicio debe haber sido llamado una vez
     """
     # Arrange
     with patch(
         "src.api.controllers.producto_alergeno_controller.ProductoAlergenoService"
     ) as mock_service_class:
         mock_service_class.return_value = mock_producto_alergeno_service
-        mock_producto_alergeno_service.delete_producto_alergeno.return_value = None
+        mock_producto_alergeno_service.delete_producto_alergeno_by_combination.return_value = None
 
         # Act
         response = test_client.delete(
@@ -515,7 +516,7 @@ def test_delete_producto_alergeno_success(
 
         # Assert
         assert response.status_code == 204
-        mock_producto_alergeno_service.delete_producto_alergeno.assert_awaited_once()
+        mock_producto_alergeno_service.delete_producto_alergeno_by_combination.assert_awaited_once()
 
 
 def test_delete_producto_alergeno_not_found(
@@ -538,14 +539,14 @@ def test_delete_producto_alergeno_not_found(
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 404 (Not Found)
         - El mensaje de error debe indicar que no se encontró la relación
-        - El método delete_producto_alergeno del servicio debe haber sido llamado una vez
+        - El método delete_producto_alergeno_by_combination del servicio debe haber sido llamado una vez
     """
     # Arrange
     with patch(
         "src.api.controllers.producto_alergeno_controller.ProductoAlergenoService"
     ) as mock_service_class:
         mock_service_class.return_value = mock_producto_alergeno_service
-        mock_producto_alergeno_service.delete_producto_alergeno.side_effect = (
+        mock_producto_alergeno_service.delete_producto_alergeno_by_combination.side_effect = (
             ProductoAlergenoNotFoundError(
                 f"No se encontró la relación entre producto {sample_producto_id} "
                 f"y alérgeno {sample_alergeno_id}"
@@ -560,4 +561,4 @@ def test_delete_producto_alergeno_not_found(
         # Assert
         assert response.status_code == 404
         assert "No se encontró la relación" in response.json()["detail"]
-        mock_producto_alergeno_service.delete_producto_alergeno.assert_awaited_once()
+        mock_producto_alergeno_service.delete_producto_alergeno_by_combination.assert_awaited_once()

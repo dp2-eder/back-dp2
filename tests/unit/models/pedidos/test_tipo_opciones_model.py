@@ -15,7 +15,7 @@ def test_tipo_opcion_model_creation():
     POSTCONDICIONES:
         - La instancia debe tener los valores exactos proporcionados durante la creación.
     """
-    tipo_id: UUID = str(ULID())
+    tipo_id = str(ULID())
     codigo = "nivel_aji"
     nombre = "Nivel de Ají"
     descripcion = "Define el nivel de picante del plato."
@@ -49,7 +49,7 @@ def test_tipo_opcion_to_dict():
     POSTCONDICIONES:
         - El diccionario debe contener las claves esperadas con valores correctos.
     """
-    tipo_id: UUID = str(ULID())
+    tipo_id= str(ULID())
     tipo_opcion = TipoOpcionModel(
         id=tipo_id,
         codigo="temperatura",

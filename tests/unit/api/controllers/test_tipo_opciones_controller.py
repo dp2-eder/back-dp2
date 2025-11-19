@@ -307,7 +307,7 @@ def test_list_tipos_opciones_success(
     assert response.status_code == 200
     assert response.json()["total"] == 2
     assert len(response.json()["items"]) == 2
-    mock_tipo_opcion_service.get_tipos_opciones.assert_awaited_once_with(0, 10)
+    mock_tipo_opcion_service.get_tipos_opciones.assert_awaited_once_with(0, 10, None, None)
 
 
 def test_list_tipos_opciones_validation_error(

@@ -2,7 +2,7 @@
 Endpoints para gestión de productos.
 """
 
-from uuid import UUID
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from src.business_logic.exceptions.producto_exceptions import (
     ProductoNotFoundError,
     ProductoConflictError,
 )
+from src.business_logic.menu.producto_alergeno_service import ProductoAlergenoService
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
@@ -60,7 +61,49 @@ async def create_producto(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",
         )
+    
+@router.get(
+    "/con-alergenos",
+    status_code=status.HTTP_200_OK,
+    summary="Listar todos los productos con sus alérgenos",
+    description="Obtiene una lista de todos los productos, cada uno con su lista de alérgenos asociados.",
+)
+async def list_productos_con_alergenos(
+    skip: int = Query(0, ge=0, description="Número de registros a omitir (paginación)"),
+    limit: int = Query(100, gt=0, le=500, description="Número máximo de registros a retornar"),
+    session: AsyncSession = Depends(get_database_session),
+):
+    """
+    Lista todos los productos con sus alérgenos asociados.
 
+    Args:
+        skip: Número de registros a omitir (offset), por defecto 0.
+        limit: Número máximo de registros a retornar, por defecto 100.
+        session: Sesión de base de datos.
+
+    Returns:
+        Lista de productos, cada uno con su lista de alérgenos.
+    """
+    try:
+        producto_service = ProductoService(session)
+        producto_alergeno_service = ProductoAlergenoService(session)
+        productos = await producto_service.get_productos(skip, limit)
+        productos_con_alergenos = []
+        for producto in productos.items:
+            alergenos = await producto_alergeno_service.get_alergenos_by_producto(producto.id)
+            productos_con_alergenos.append({
+                "producto": producto,
+                "alergenos": alergenos
+            })
+        return {
+            "items": productos_con_alergenos,
+            "total": productos.total
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
 
 @router.get(
     "/cards",
@@ -198,41 +241,7 @@ async def get_producto(
     response_model=ProductoConOpcionesResponse,
     status_code=status.HTTP_200_OK,
     summary="Obtener producto con opciones agrupadas por tipo",
-    description="""
-    Obtiene los detalles completos de un producto con todas sus opciones 
-    **agrupadas por tipo de opción**.
-    
-    **Cambios recientes:**
-    - ✅ Ahora incluye `descripcion` y `precio_base` del producto
-    - ✅ Opciones agrupadas en `tipos_opciones[]` por tipo
-    - ✅ Cada tipo incluye metadata (obligatorio, múltiple selección, orden)
-    
-    **Estructura de respuesta:**
-    ```json
-    {
-      "id": "01K7ZCT8PNJA2J8EB83NHA1MK4",
-      "nombre": "Ceviche Clásico",
-      "descripcion": "Pescado fresco del día marinado...",
-      "precio_base": "25.00",
-      "tipos_opciones": [
-        {
-          "id_tipo_opcion": "01K7...",
-          "nombre_tipo": "Nivel de picante",
-          "obligatorio": true,
-          "multiple_seleccion": false,
-          "opciones": [
-            {"nombre": "Sin ají", "precio_adicional": "0.00"},
-            {"nombre": "Ají suave", "precio_adicional": "0.00"}
-          ]
-        }
-      ]
-    }
-    ```
-    
-    **Errores posibles:**
-    - 404: Si no se encuentra un producto con el ID proporcionado
-    - 500: Si ocurre un error interno del servidor
-    """,
+    description="Obtiene los detalles completos de un producto con todas sus opciones agrupadas por tipo de opción.",
 )
 async def get_producto_con_opciones(
     producto_id: str, session: AsyncSession = Depends(get_database_session)
@@ -265,6 +274,40 @@ async def get_producto_con_opciones(
 
 
 @router.get(
+    "/{producto_id}/alergenos",
+    status_code=status.HTTP_200_OK,
+    summary="Obtener alérgenos de un producto",
+    description="Obtiene todos los alérgenos asociados a un producto específico.",
+)
+async def get_alergenos_by_producto(
+    producto_id: str, session: AsyncSession = Depends(get_database_session)
+):
+    """
+    Obtiene todos los alérgenos asociados a un producto específico.
+
+    Args:
+        producto_id: ID del producto a buscar (ULID).
+        session: Sesión de base de datos.
+
+    Returns:
+        Lista de alérgenos asociados al producto.
+
+    Raises:
+        HTTPException:
+            - 404: Si no se encuentra el producto o no tiene alérgenos.
+            - 500: Si ocurre un error interno del servidor.
+    """
+    try:
+        producto_alergeno_service = ProductoAlergenoService(session)
+        return await producto_alergeno_service.get_alergenos_by_producto(producto_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+
+@router.get(
     "",
     response_model=ProductoList,
     status_code=status.HTTP_200_OK,
@@ -277,28 +320,40 @@ async def list_productos(
         100, gt=0, le=500, description="Número máximo de registros a retornar"
     ),
     id_categoria: str = Query(None, description="Filtrar productos por ID de categoría"),
+    id_mesa: Optional[str] = Query(None, description="ID de mesa (filtra por local de la mesa)"),
+    id_local: Optional[str] = Query(None, description="ID de local (filtro directo)"),
     session: AsyncSession = Depends(get_database_session),
 ) -> ProductoList:
     """
     Obtiene una lista paginada de productos.
-    
+
+    Ejemplos:
+    - GET /productos → Todos los productos
+    - GET /productos?id_categoria=xyz → Productos de una categoría
+    - GET /productos?id_mesa=abc123 → Productos del local de la mesa (con overrides)
+    - GET /productos?id_local=xyz789 → Productos del local específico (con overrides)
+
+    Los overrides incluyen: precio, nombre, descripción, disponibilidad.
+
     Args:
         skip: Número de registros a omitir (offset), por defecto 0.
         limit: Número máximo de registros a retornar, por defecto 100.
         id_categoria: ID de categoría para filtrar productos (opcional).
+        id_mesa: ID de mesa para filtrar por su local (el backend resuelve local automáticamente).
+        id_local: ID de local para filtrar directamente.
         session: Sesión de base de datos.
-        
+
     Returns:
         Lista paginada de productos y el número total de registros.
 
     Raises:
         HTTPException:
-            - 400: Si los parámetros de paginación son inválidos.
+            - 400: Si los parámetros de paginación son inválidos o la mesa no tiene local.
             - 500: Si ocurre un error interno del servidor.
     """
     try:
         producto_service = ProductoService(session)
-        return await producto_service.get_productos(skip, limit, id_categoria) 
+        return await producto_service.get_productos(skip, limit, id_categoria, id_mesa, id_local)
     except ProductoValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -384,3 +439,4 @@ async def delete_producto(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",
         )
+
