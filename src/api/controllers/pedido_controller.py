@@ -140,23 +140,23 @@ async def create_pedido_completo(
 
 @router.get(
     "/{pedido_id}",
-    response_model=PedidoResponse,
+    response_model=PedidoCompletoResponse,
     status_code=status.HTTP_200_OK,
     summary="Obtener un pedido por ID",
-    description="Obtiene los detalles de un pedido específico por su ID.",
+    description="Obtiene los detalles de un pedido específico por su ID, incluyendo todos sus items y opciones.",
 )
 async def get_pedido(
     pedido_id: str, session: AsyncSession = Depends(get_database_session)
-) -> PedidoResponse:
+) -> PedidoCompletoResponse:
     """
-    Obtiene un pedido específico por su ID.
+    Obtiene un pedido específico por su ID con todos sus items y opciones.
 
     Args:
         pedido_id: ID del pedido a buscar (ULID).
         session: Sesión de base de datos.
 
     Returns:
-        El pedido encontrado con todos sus datos.
+        El pedido encontrado con todos sus datos, items y opciones.
 
     Raises:
         HTTPException:

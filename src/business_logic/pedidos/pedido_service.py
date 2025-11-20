@@ -189,9 +189,9 @@ class PedidoService:
                 f"Error al crear el pedido. Posible conflicto con numero_pedido o FK inválida"
             )
 
-    async def get_pedido_by_id(self, pedido_id: str) -> PedidoResponse:
+    async def get_pedido_by_id(self, pedido_id: str) -> PedidoCompletoResponse:
         """
-        Obtiene un pedido por su ID.
+        Obtiene un pedido por su ID con todos sus items y opciones.
 
         Parameters
         ----------
@@ -200,8 +200,8 @@ class PedidoService:
 
         Returns
         -------
-        PedidoResponse
-            Esquema de respuesta con los datos del pedido.
+        PedidoCompletoResponse
+            Esquema de respuesta con los datos del pedido incluyendo items y opciones.
 
         Raises
         ------
@@ -215,8 +215,37 @@ class PedidoService:
         if not pedido:
             raise PedidoNotFoundError(f"No se encontró el pedido con ID {pedido_id}")
 
-        # Convertir y retornar como esquema de respuesta
-        return PedidoResponse.model_validate(pedido)
+        # Obtener items del pedido
+        items = await self.pedido_producto_repository.get_by_pedido_id(pedido_id)
+
+        # Construir items con opciones
+        items_with_opciones_response = []
+        for item in items:
+            # Obtener opciones del item
+            opciones = await self.pedido_opcion_repository.get_by_pedido_producto_id(item.id)
+            
+            # Convertir el item con sus opciones
+            item_dict = {
+                "id": item.id,
+                "id_pedido": item.id_pedido,
+                "id_producto": item.id_producto,
+                "cantidad": item.cantidad,
+                "precio_unitario": item.precio_unitario,
+                "precio_opciones": item.precio_opciones,
+                "subtotal": item.subtotal,
+                "notas_personalizacion": item.notas_personalizacion,
+                "fecha_creacion": item.fecha_creacion,
+                "fecha_modificacion": item.fecha_modificacion,
+                "opciones": [PedidoOpcionResponse.model_validate(opcion) for opcion in opciones]
+            }
+            items_with_opciones_response.append(PedidoProductoWithOpcionesResponse(**item_dict))
+
+        # Construir respuesta completa
+        pedido_response = PedidoResponse.model_validate(pedido)
+        response_dict = pedido_response.model_dump()
+        response_dict["items"] = items_with_opciones_response
+
+        return PedidoCompletoResponse(**response_dict)
 
     async def get_pedido_by_numero(self, numero_pedido: str) -> PedidoResponse:
         """
