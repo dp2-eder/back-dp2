@@ -198,6 +198,7 @@ class ProductoCardList(BaseModel):
 
 # Import real después de definir las clases para evitar circular import
 from src.api.schemas.producto_opcion_schema import ProductoOpcionResponse  # noqa: E402
+from src.api.schemas.producto_alergeno_schema import ProductoAlergenoUpdateInput  # noqa: E402
 
 # Actualizar forward references
 ProductoConOpcionesResponse.model_rebuild()
@@ -205,14 +206,14 @@ ProductoConOpcionesResponse.model_rebuild()
 
 class ProductoOpcionCompletoSchema(BaseModel):
     """Schema para opciones de producto en actualización masiva."""
-    
+
     model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
-    
-    id_opcion: str = Field(description="ID de la opción")
+
+    id_opcion: Optional[str] = Field(default=None, description="ID de la opción (null si es nueva)")
     nombre: str = Field(description="Nombre de la opción", min_length=1, max_length=255)
     precio_adicional: Decimal = Field(description="Precio adicional", ge=0)
-    activo: bool = Field(description="Si la opción está activa")
-    orden: int = Field(description="Orden de visualización", ge=0)
+    activo: bool = Field(default=True, description="Si la opción está activa")
+    orden: int = Field(default=0, description="Orden de visualización", ge=0)
 
 
 class TipoOpcionCompletoSchema(BaseModel):
@@ -239,9 +240,9 @@ class SeccionProductoSchema(BaseModel):
 
 class ProductoCompletoUpdateSchema(BaseModel):
     """Schema para actualización masiva de producto con todos sus datos."""
-    
+
     model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
-    
+
     # Datos básicos del producto
     nombre: str = Field(description="Nombre del producto", min_length=1, max_length=255)
     descripcion: Optional[str] = Field(default=None, description="Descripción del producto")
@@ -249,11 +250,23 @@ class ProductoCompletoUpdateSchema(BaseModel):
     imagen_path: Optional[str] = Field(default=None, description="Ruta imagen", max_length=255)
     imagen_alt_text: Optional[str] = Field(default=None, description="Texto alt imagen", max_length=255)
     id_categoria: str = Field(description="ID de la categoría")
-    disponible: bool = Field(description="Si el producto está disponible")
-    destacado: bool = Field(description="Si el producto está destacado")
-    
-    # Relaciones
-    alergenos: List[str] = Field(description="Lista de IDs de alérgenos")
-    secciones: List[SeccionProductoSchema] = Field(description="Lista de secciones del producto") 
-    tipos_opciones: List[TipoOpcionCompletoSchema] = Field(description="Lista de tipos de opciones")
+    disponible: bool = Field(default=True, description="Si el producto está disponible")
+    destacado: bool = Field(default=False, description="Si el producto está destacado")
 
+    # Relaciones
+    alergenos: List["ProductoAlergenoUpdateInput"] = Field(
+        default_factory=list,
+        description="Lista de alérgenos con nivel de presencia y notas"
+    )
+    secciones: List[SeccionProductoSchema] = Field(
+        default_factory=list,
+        description="Lista de secciones del producto"
+    )
+    tipos_opciones: List[TipoOpcionCompletoSchema] = Field(
+        default_factory=list,
+        description="Lista de tipos de opciones"
+    )
+
+
+# Rebuild para resolver forward references
+ProductoCompletoUpdateSchema.model_rebuild()

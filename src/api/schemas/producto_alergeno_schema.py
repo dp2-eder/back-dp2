@@ -82,3 +82,18 @@ class ProductoAlergenoList(BaseModel):
 
     items: List[ProductoAlergenoSummary]
     total: int = Field(description="Total number of producto-alergeno relationships")
+
+
+class ProductoAlergenoUpdateInput(BaseModel):
+    """Schema for allergen input in product update operations."""
+
+    id_alergeno: str = Field(description="Allergen ID")
+    nivel_presencia: NivelPresencia = Field(
+        default=NivelPresencia.CONTIENE,
+        description="Allergen presence level: contiene, trazas, puede_contener"
+    )
+    notas: Optional[str] = Field(
+        default=None,
+        description="Additional notes about the allergen",
+        max_length=255
+    )

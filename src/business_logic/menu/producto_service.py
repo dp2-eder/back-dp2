@@ -56,6 +56,12 @@ class ProductoService:
         self.mesa_repository = MesaRepository(session)
         self.locales_productos_repository = LocalesProductosRepository(session)
 
+        # Repositorios adicionales para actualización completa
+        from src.repositories.menu.producto_alergeno_repository import ProductoAlergenoRepository
+        from src.repositories.pedidos.producto_opcion_repository import ProductoOpcionRepository
+        self.producto_alergeno_repository = ProductoAlergenoRepository(session)
+        self.producto_opcion_repository = ProductoOpcionRepository(session)
+
     async def create_producto(self, producto_data: ProductoCreate) -> ProductoResponse:
         """
         Crea un nuevo producto en el sistema.
@@ -597,6 +603,145 @@ class ProductoService:
         # Retornar esquema de lista
         return ProductoCardList(items=producto_cards, total=total)
 
+    async def _update_producto_alergenos(
+        self,
+        producto_id: str,
+        alergenos_data: List
+    ) -> None:
+        """
+        Actualiza los alérgenos de un producto usando soft delete.
+
+        Estrategia:
+        1. Obtener alérgenos actuales (incluyendo inactivos)
+        2. Desactivar los que NO estén en la nueva lista
+        3. Reactivar/actualizar los que SÍ estén en la nueva lista
+        4. Crear nuevos que no existían
+
+        Parameters
+        ----------
+        producto_id : str
+            ID del producto.
+        alergenos_data : List[ProductoAlergenoUpdateInput]
+            Lista de alérgenos con nivel_presencia y notas.
+        """
+        # Obtener IDs de alérgenos de la request
+        alergenos_ids_nuevos = {a.id_alergeno for a in alergenos_data}
+
+        # Obtener relaciones actuales (incluyendo inactivos para poder reactivar)
+        relaciones_actuales = await self.producto_alergeno_repository.get_by_producto(
+            producto_id,
+            solo_activos=False  # Obtener TODOS
+        )
+
+        # Desactivar alérgenos que ya no están en la lista
+        for relacion in relaciones_actuales:
+            if relacion.id_alergeno not in alergenos_ids_nuevos:
+                # Desactivar si no está en la nueva lista
+                await self.producto_alergeno_repository.update(
+                    relacion.id,
+                    activo=False
+                )
+
+        # Actualizar o crear alérgenos de la nueva lista
+        for alergeno_input in alergenos_data:
+            # Buscar si ya existe la relación (activa o inactiva)
+            relacion_existente = next(
+                (r for r in relaciones_actuales
+                 if r.id_alergeno == alergeno_input.id_alergeno),
+                None
+            )
+
+            if relacion_existente:
+                # Actualizar y reactivar si estaba inactiva
+                await self.producto_alergeno_repository.update(
+                    relacion_existente.id,
+                    nivel_presencia=alergeno_input.nivel_presencia,
+                    notas=alergeno_input.notas,
+                    activo=True  # Reactivar
+                )
+            else:
+                # Crear nueva relación
+                from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
+                nueva_relacion = ProductoAlergenoModel(
+                    id_producto=producto_id,
+                    id_alergeno=alergeno_input.id_alergeno,
+                    nivel_presencia=alergeno_input.nivel_presencia,
+                    notas=alergeno_input.notas,
+                    activo=True
+                )
+                await self.producto_alergeno_repository.create(nueva_relacion)
+
+    async def _update_producto_opciones(
+        self,
+        producto_id: str,
+        tipos_opciones_data: List
+    ) -> None:
+        """
+        Actualiza las opciones de un producto usando soft delete.
+
+        Estrategia:
+        1. Obtener opciones actuales del producto
+        2. Para cada tipo de opción en la request:
+           - Desactivar opciones del tipo que no estén en la lista
+           - Actualizar opciones existentes (con ID)
+           - Crear opciones nuevas (sin ID o ID=None)
+
+        Parameters
+        ----------
+        producto_id : str
+            ID del producto.
+        tipos_opciones_data : List[TipoOpcionCompletoSchema]
+            Lista de tipos de opciones con sus opciones.
+        """
+        # Obtener opciones actuales (incluyendo inactivas)
+        opciones_actuales = await self.producto_opcion_repository.get_by_producto(
+            producto_id,
+            solo_activos=False
+        )
+
+        # Procesar cada tipo de opción
+        for tipo_opciones in tipos_opciones_data:
+            id_tipo_opcion = tipo_opciones.id_tipo_opcion
+
+            # IDs de opciones que vienen en la request para este tipo
+            opciones_ids_nuevos = {
+                o.id_opcion for o in tipo_opciones.opciones
+                if o.id_opcion is not None
+            }
+
+            # Desactivar opciones de este tipo que NO están en la nueva lista
+            for opcion_actual in opciones_actuales:
+                if (opcion_actual.id_tipo_opcion == id_tipo_opcion and
+                    opcion_actual.id not in opciones_ids_nuevos):
+                    await self.producto_opcion_repository.update(
+                        opcion_actual.id,
+                        activo=False
+                    )
+
+            # Crear o actualizar opciones
+            for opcion_data in tipo_opciones.opciones:
+                if opcion_data.id_opcion:
+                    # Actualizar opción existente y reactivar
+                    await self.producto_opcion_repository.update(
+                        opcion_data.id_opcion,
+                        nombre=opcion_data.nombre,
+                        precio_adicional=opcion_data.precio_adicional,
+                        activo=opcion_data.activo,  # Respetar el activo del input
+                        orden=opcion_data.orden
+                    )
+                else:
+                    # Crear nueva opción
+                    from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
+                    nueva_opcion = ProductoOpcionModel(
+                        id_producto=producto_id,
+                        id_tipo_opcion=id_tipo_opcion,
+                        nombre=opcion_data.nombre,
+                        precio_adicional=opcion_data.precio_adicional,
+                        activo=opcion_data.activo,
+                        orden=opcion_data.orden
+                    )
+                    await self.producto_opcion_repository.create(nueva_opcion)
+
     async def update_producto_completo(
         self, producto_id: str, producto_data: ProductoCompletoUpdateSchema
     ) -> ProductoConOpcionesResponse:
@@ -648,14 +793,14 @@ class ProductoService:
             # Actualizar el producto base usando **kwargs
             updated_producto = await self.repository.update(producto_id, **update_data)
 
-            # TODO: Actualizar alérgenos del producto
-            # await self._update_producto_alergenos(producto_id, producto_data.alergenos)
+            # Actualizar alérgenos del producto
+            await self._update_producto_alergenos(producto_id, producto_data.alergenos)
 
-            # TODO: Actualizar secciones del producto
+            # Actualizar opciones del producto
+            await self._update_producto_opciones(producto_id, producto_data.tipos_opciones)
+
+            # NOTA: Secciones las dejamos para después si es necesario
             # await self._update_producto_secciones(producto_id, producto_data.secciones)
-
-            # TODO: Actualizar tipos de opciones y opciones del producto
-            # await self._update_producto_tipos_opciones(producto_id, producto_data.tipos_opciones)
 
             # Obtener el producto actualizado con todas sus relaciones
             producto_completo = await self.repository.get_by_id_with_opciones(producto_id)

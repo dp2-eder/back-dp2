@@ -609,7 +609,18 @@ def sample_producto_completo_data():
         "id_categoria": str(ULID()),
         "disponible": True,
         "destacado": False,
-        "alergenos": [str(ULID()), str(ULID())],
+        "alergenos": [
+            {
+                "id_alergeno": str(ULID()),
+                "nivel_presencia": "contiene",
+                "notas": "Alérgeno de prueba 1"
+            },
+            {
+                "id_alergeno": str(ULID()),
+                "nivel_presencia": "contiene",
+                "notas": "Alérgeno de prueba 2"
+            }
+        ],
         "secciones": [{"id_seccion": str(ULID())}, {"id_seccion": str(ULID())}],
         "tipos_opciones": [
             {

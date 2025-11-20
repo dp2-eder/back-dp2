@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src.core.database import create_tables, close_database
 from src.core.config import get_settings
@@ -187,6 +188,7 @@ def register_routers(app: FastAPI) -> None:
         ("src.api.controllers.producto_controller", "Productos"),
         ("src.api.controllers.tipo_opciones_controller", "Tipos de Opciones"),
         ("src.api.controllers.producto_opcion_controller", "Producto Opciones"),
+        ("src.api.controllers.producto_opciones_manage_controller", "Gestión de Opciones de Productos"),
         ("src.api.controllers.sync_controller", "Sincronización"),
         ("src.api.controllers.mesa_controller", "Mesas"),
         ("src.api.controllers.pedido_controller", "Pedidos"),
@@ -247,6 +249,12 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=lifespan,
     )
+
+    # Montar archivos estáticos para imágenes
+    from pathlib import Path
+    static_dir = Path("static")
+    static_dir.mkdir(exist_ok=True)
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
     # Agregar middleware CORS
     app.add_middleware(
