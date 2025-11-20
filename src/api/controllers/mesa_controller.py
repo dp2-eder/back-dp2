@@ -370,6 +370,7 @@ async def list_qr_urls(
         for mesa in mesas_list.items:
             qr_urls.append({
                 "id_mesa": mesa.id,
+                "numero_mesa": mesa.numero,
                 "qr_url": f"https://front-dp2.onrender.com/login?{mesa.id}"
             })
 
