@@ -126,6 +126,20 @@ class PedidoEstadoUpdate(BaseModel):
     estado: EstadoPedido = Field(description="New order status")
 
 
+class PedidoItemResponse(BaseModel):
+    """Schema for item in pedido response."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+    id_producto: str = Field(description="Producto ID (ULID)")
+    cantidad: int = Field(description="Quantity")
+    precio_unitario: Decimal = Field(description="Unit price")
+    opciones: List[str] = Field(default=[], description="List of opcion IDs")
+    notas_personalizacion: Optional[str] = Field(
+        default=None, description="Customization notes"
+    )
+
+
 class PedidoResponse(PedidoBase):
     """Schema for pedido responses."""
 
@@ -281,7 +295,9 @@ class PedidoProductoWithOpcionesResponse(BaseModel):
 class PedidoCompletoResponse(PedidoResponse):
     """Schema for complete order response with items and their options."""
 
-    items: List[PedidoProductoWithOpcionesResponse] = Field(description="Order items with options")
+    items: List[PedidoItemResponse] = Field(
+        default_factory=list, description="Order items with options"
+    )
 
 # Import for type hint in PedidoCompletoResponse
 from src.api.schemas.pedido_producto_schema import PedidoProductoResponse
