@@ -7,7 +7,7 @@ representar las sesiones en la API.
 
 from typing import Optional, ClassVar, List
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 
 from src.core.enums.sesion_enums import EstadoSesion
 
@@ -82,7 +82,7 @@ class SesionUpdate(BaseModel):
     )
     estado: Optional[EstadoSesion] = Field(
         default=None,
-        description="Nuevo estado de la sesión (ACTIVO, INACTIVO, CERRADO)."
+        description="Nuevo estado de la sesión (ACTIVO, INACTIVO, CERRADO, FINALIZADO)."
     )
 
 
@@ -103,6 +103,19 @@ class SesionResponse(SesionBase):
         default=None, description="Fecha y hora de la última modificación."
     )
 
+    @computed_field(return_type=Optional[datetime])
+    @property
+    def fecha_fin(self) -> Optional[datetime]:
+        """
+        Fecha de finalización de la sesión.
+        
+        Retorna fecha_modificacion cuando el estado es CERRADO o FINALIZADO,
+        None en caso contrario.
+        """
+        if self.estado in EstadoSesion.estados_finalizados():
+            return self.fecha_modificacion
+        return None
+
 
 class SesionSummary(BaseModel):
     """
@@ -119,6 +132,19 @@ class SesionSummary(BaseModel):
     estado: EstadoSesion = Field(description="Estado actual de la sesión.")
     fecha_creacion: Optional[datetime] = Field(description="Fecha de creación.")
     fecha_modificacion: Optional[datetime] = Field(description="Fecha de última modificación.")
+
+    @computed_field(return_type=Optional[datetime])
+    @property
+    def fecha_fin(self) -> Optional[datetime]:
+        """
+        Fecha de finalización de la sesión.
+        
+        Retorna fecha_modificacion cuando el estado es CERRADO o FINALIZADO,
+        None en caso contrario.
+        """
+        if self.estado in EstadoSesion.estados_finalizados():
+            return self.fecha_modificacion
+        return None
 
 
 class SesionList(BaseModel):

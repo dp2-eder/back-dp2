@@ -3,6 +3,7 @@ Servicio para la gestión de sesiones en el sistema.
 """
 
 from typing import Optional
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -314,6 +315,13 @@ class SesionService:
         if "id_domotica" in update_data:
             if not update_data["id_domotica"] or update_data["id_domotica"].strip() == "":
                 raise SesionValidationError("El id_domotica no puede estar vacío")
+
+        # Convertir estado a enum si es necesario
+        # fecha_modificacion se actualizará automáticamente por AuditMixin
+        if "estado" in update_data:
+            estado = update_data["estado"]
+            if not isinstance(estado, EstadoSesion):
+                update_data["estado"] = EstadoSesion(estado)
 
         try:
             # Actualizar la sesión

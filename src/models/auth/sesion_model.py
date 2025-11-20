@@ -62,7 +62,11 @@ class SesionModel(BaseModel, AuditMixin):
         comment="Jerarquía de la sesión, 1 es la más alta"
     )
     estado: Mapped[EstadoSesion] = mapped_column(
-        SQLEnum(EstadoSesion), nullable=False, default=EstadoSesion.ACTIVO, index=True, comment="Estado actual de la sesión"
+        SQLEnum(EstadoSesion),
+        nullable=False,
+        default=EstadoSesion.ACTIVO,
+        index=True,
+        comment="Estado actual de la sesión"
     )
 
     # Relación con Local

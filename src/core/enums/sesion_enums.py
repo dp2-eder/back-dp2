@@ -24,3 +24,14 @@ class EstadoSesion(str, Enum):
     ACTIVO = "activo"
     INACTIVO = "inactivo"
     CERRADO = "cerrado"
+    FINALIZADO = "finalizado"
+
+    @classmethod
+    def estados_finalizados(cls) -> set["EstadoSesion"]:
+        """
+        Retorna los estados que representan una sesión cerrada o finalizada.
+
+        Se utiliza para agrupar comportamientos comunes cuando la sesión se
+        marca como cerrada o finalizada.
+        """
+        return {cls.CERRADO, cls.FINALIZADO}
