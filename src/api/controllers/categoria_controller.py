@@ -20,9 +20,9 @@ from src.business_logic.exceptions.categoria_exceptions import (
     CategoriaNotFoundError,
     CategoriaConflictError,
 )
+from src.core.auth_dependencies import get_current_admin
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
-
 
 @router.post(
     "",
@@ -244,6 +244,7 @@ async def get_categorias_con_productos_cards(
         100, gt=0, le=500, description="Número máximo de registros a retornar"
     ),
     session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
 ) -> CategoriaConProductosCardList:
     """
     Obtiene el menú visual (categorías + productos minimal).

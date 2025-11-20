@@ -109,6 +109,32 @@ class AdminService:
 
         return AdminResponse.model_validate(admin)
 
+    async def get_admin_by_id(self, admin_id: str) -> AdminResponse:
+        """
+        Obtiene un administrador por ID
+
+        Parameters
+        ----------
+        admin_id : str
+            Id del administrador.
+
+        Returns
+        ------
+        AdminResponse
+            Esquema de respuesta con los datos del administrador.
+
+        Raises
+        ------
+        AdminNotFoundError
+            Si no se encuentra el administrador.
+        """
+        admin = await self.repository.get_by_id(admin_id)
+
+        if not admin:
+            raise AdminNotFoundError("No se encontró el administrador")
+
+        return AdminResponse.model_validate(admin)
+
     async def update_last_login(self, admin_id: str) -> None:
         """
         Actualiza la fecha de último acceso del administrador.

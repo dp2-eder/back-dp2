@@ -23,6 +23,7 @@ from src.business_logic.exceptions.producto_exceptions import (
     ProductoConflictError,
 )
 from src.business_logic.menu.producto_alergeno_service import ProductoAlergenoService
+from src.core.auth_dependencies import get_current_admin
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
@@ -39,7 +40,7 @@ async def create_producto(
 ) -> ProductoResponse:
     """
     Crea un nuevo producto en el sistema.
-    
+
     Args:
         producto_data: Datos del producto a crear.
         session: Sesión de base de datos.
@@ -62,7 +63,7 @@ async def create_producto(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",
         )
-    
+
 @router.get(
     "/con-alergenos",
     status_code=status.HTTP_200_OK,
@@ -122,16 +123,16 @@ async def list_all_productos_cards(
 ) -> ProductoCardList:
     """
     Obtiene una lista paginada de TODOS los productos en formato card.
-    
+
     Este endpoint devuelve todos los productos con información completa de categoría:
     - Datos del producto: ID, nombre, imagen, precio
     - Datos de la categoría: ID, nombre, imagen
-    
+
     Args:
         skip: Número de registros a omitir (offset), por defecto 0.
         limit: Número máximo de registros a retornar, por defecto 100.
         session: Sesión de base de datos.
-        
+
     Returns:
         Lista paginada de productos en formato card con información de categoría.
 
@@ -169,17 +170,17 @@ async def list_productos_cards_by_categoria(
 ) -> ProductoCardList:
     """
     Obtiene una lista paginada de productos de una categoría específica en formato card.
-    
+
     Este endpoint devuelve productos filtrados por categoría con información completa:
     - Datos del producto: ID, nombre, imagen, precio
     - Datos de la categoría: ID, nombre, imagen
-    
+
     Args:
         categoria_id: ID de la categoría para filtrar productos.
         skip: Número de registros a omitir (offset), por defecto 0.
         limit: Número máximo de registros a retornar, por defecto 100.
         session: Sesión de base de datos.
-        
+
     Returns:
         Lista paginada de productos en formato card con información de categoría.
 
@@ -249,14 +250,14 @@ async def get_producto_con_opciones(
 ):
     """
     Obtiene un producto específico por su ID con opciones agrupadas por tipo.
-    
+
     Args:
         producto_id: ID del producto a buscar (ULID).
         session: Sesión de base de datos.
-        
+
     Returns:
         El producto con descripción, precio y opciones agrupadas por tipo.
-        
+
     Raises:
         HTTPException:
             - 404: Si no se encuentra el producto.
@@ -453,6 +454,7 @@ async def update_producto_completo(
     producto_id: str,
     producto_data: ProductoCompletoUpdateSchema,
     session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
 ) -> ProductoConOpcionesResponse:
     """
     Actualiza completamente un producto con todos sus datos relacionados.
@@ -492,4 +494,3 @@ async def update_producto_completo(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",
         )
-
