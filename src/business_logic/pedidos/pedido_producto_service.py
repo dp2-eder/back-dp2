@@ -12,6 +12,7 @@ from src.repositories.pedidos.pedido_producto_repository import PedidoProductoRe
 from src.repositories.pedidos.pedido_repository import PedidoRepository
 from src.repositories.menu.producto_repository import ProductoRepository
 from src.models.pedidos.pedido_producto_model import PedidoProductoModel
+from src.business_logic.pedidos.pedido_service import PedidoService
 from src.api.schemas.pedido_producto_schema import (
     PedidoProductoCreate,
     PedidoProductoUpdate,
@@ -55,6 +56,7 @@ class PedidoProductoService:
         self.repository = PedidoProductoRepository(session)
         self.pedido_repository = PedidoRepository(session)
         self.producto_repository = ProductoRepository(session)
+        self.pedido_service = PedidoService(session)
 
     async def create_pedido_producto(
         self, item_data: PedidoProductoCreate
@@ -115,6 +117,9 @@ class PedidoProductoService:
 
             # Persistir en la base de datos
             created_item = await self.repository.create(item)
+
+            # Recalcular totales del pedido
+            await self.pedido_service._recalcular_totales_pedido(item_data.id_pedido)
 
             # Convertir y retornar como esquema de respuesta
             return PedidoProductoResponse.model_validate(created_item)
@@ -218,8 +223,16 @@ class PedidoProductoService:
                 f"No se encontró el item de pedido con ID {item_id}"
             )
 
+        # Guardar el id_pedido antes de eliminar
+        pedido_id = item.id_pedido
+
         # Eliminar el item
         result = await self.repository.delete(item_id)
+
+        # Recalcular totales del pedido
+        if result:
+            await self.pedido_service._recalcular_totales_pedido(pedido_id)
+
         return result
 
     async def get_pedidos_productos(
@@ -327,6 +340,9 @@ class PedidoProductoService:
                 raise PedidoProductoNotFoundError(
                     f"No se encontró el item de pedido con ID {item_id}"
                 )
+
+            # Recalcular totales del pedido
+            await self.pedido_service._recalcular_totales_pedido(updated_item.id_pedido)
 
             # Convertir y retornar como esquema de respuesta
             return PedidoProductoResponse.model_validate(updated_item)

@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from src.core.enums.pedido_enums import EstadoPedido
+from src.api.schemas.pedido_producto_schema import PedidoProductoSummary
 
 
 class PedidoBase(BaseModel):
@@ -167,6 +168,11 @@ class PedidoResponse(PedidoBase):
     )
     modificado_por: Optional[str] = Field(
         default=None, description="Modified by user ID"
+    )
+
+    # Items del pedido (opcional, se incluye cuando se solicita)
+    items: Optional[List[PedidoProductoSummary]] = Field(
+        default=None, description="List of order items"
     )
 
 

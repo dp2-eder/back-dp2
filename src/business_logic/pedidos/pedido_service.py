@@ -139,6 +139,43 @@ class PedidoService:
 
         return numero_pedido
 
+    async def _recalcular_totales_pedido(self, pedido_id: str) -> None:
+        """
+        Recalcula los totales de un pedido sumando los subtotales de todos sus items.
+
+        Parameters
+        ----------
+        pedido_id : str
+            Identificador único del pedido (ULID).
+
+        Raises
+        ------
+        PedidoNotFoundError
+            Si no se encuentra el pedido.
+        """
+        # Obtener todos los items del pedido
+        items = await self.pedido_producto_repository.get_by_pedido_id(pedido_id)
+
+        # Calcular subtotal sumando todos los subtotales de los items
+        subtotal = Decimal("0.00")
+        for item in items:
+            subtotal += item.subtotal
+
+        # Por ahora, total = subtotal (sin impuestos ni descuentos)
+        # Si en el futuro se agregan impuestos/descuentos, se calcularían aquí
+        impuestos = Decimal("0.00")
+        descuentos = Decimal("0.00")
+        total = subtotal
+
+        # Actualizar el pedido con los nuevos totales
+        await self.repository.update(
+            pedido_id,
+            subtotal=subtotal,
+            impuestos=impuestos,
+            descuentos=descuentos,
+            total=total
+        )
+
     async def create_pedido(self, pedido_data: PedidoCreate) -> PedidoResponse:
         """
         Crea un nuevo pedido en el sistema.
@@ -201,7 +238,7 @@ class PedidoService:
         Returns
         -------
         PedidoResponse
-            Esquema de respuesta con los datos del pedido.
+            Esquema de respuesta con los datos del pedido, incluyendo sus items.
 
         Raises
         ------
@@ -215,8 +252,18 @@ class PedidoService:
         if not pedido:
             raise PedidoNotFoundError(f"No se encontró el pedido con ID {pedido_id}")
 
-        # Convertir y retornar como esquema de respuesta
-        return PedidoResponse.model_validate(pedido)
+        # Obtener los items del pedido
+        items = await self.pedido_producto_repository.get_by_pedido_id(pedido_id)
+        
+        # Convertir items a esquemas de resumen
+        from src.api.schemas.pedido_producto_schema import PedidoProductoSummary
+        items_summaries = [PedidoProductoSummary.model_validate(item) for item in items]
+
+        # Convertir pedido a esquema de respuesta y agregar items
+        pedido_response = PedidoResponse.model_validate(pedido)
+        pedido_response.items = items_summaries
+
+        return pedido_response
 
     async def get_pedido_by_numero(self, numero_pedido: str) -> PedidoResponse:
         """
