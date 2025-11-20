@@ -28,6 +28,7 @@ from src.api.schemas.pedido_schema import (
     PedidoEstadoUpdate,
     PedidoCompletoCreate,
     PedidoCompletoResponse,
+    PedidoItemResponse,
 )
 from src.api.schemas.pedido_producto_schema import PedidoProductoResponse
 from src.api.schemas.pedido_opcion_schema import PedidoOpcionResponse
@@ -249,7 +250,7 @@ class PedidoService:
 
     async def get_pedido_by_numero(self, numero_pedido: str) -> PedidoResponse:
         """
-        Obtiene un pedido por su número único.
+        Obtiene un pedido por su número único incluyendo los detalles de cada item.
 
         Parameters
         ----------
@@ -259,7 +260,7 @@ class PedidoService:
         Returns
         -------
         PedidoResponse
-            Esquema de respuesta con los datos del pedido.
+            Esquema de respuesta con los datos del pedido e items.
 
         Raises
         ------
@@ -275,8 +276,30 @@ class PedidoService:
                 f"No se encontró el pedido con número {numero_pedido}"
             )
 
-        # Convertir y retornar como esquema de respuesta
-        return PedidoResponse.model_validate(pedido)
+        # Obtener items del pedido
+        items = await self.pedido_producto_repository.get_by_pedido_id(pedido.id)
+
+        items_response = []
+        for item in items:
+            opciones = await self.pedido_opcion_repository.get_by_pedido_producto_id(
+                item.id
+            )
+            opciones_ids = [opcion.id_producto_opcion for opcion in opciones]
+
+            items_response.append(
+                PedidoItemResponse(
+                    id_producto=item.id_producto,
+                    cantidad=item.cantidad,
+                    precio_unitario=item.precio_unitario,
+                    opciones=opciones_ids,
+                    notas_personalizacion=item.notas_personalizacion,
+                )
+            )
+
+        pedido_response = PedidoResponse.model_validate(pedido)
+        pedido_response.items = items_response
+
+        return pedido_response
 
     async def delete_pedido(self, pedido_id: str) -> bool:
         """
