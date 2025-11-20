@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -20,6 +20,7 @@ from src.api.schemas.producto_schema import (
     ProductoOpcionDetalleSchema,
     ProductoCompletoUpdateSchema
 )
+from src.api.schemas.alergeno_schema import ProductoAlergeno
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
     ProductoNotFoundError,
@@ -53,6 +54,107 @@ class ProductoService:
         self.mesa_repository = MesaRepository(session)
         self.locales_productos_repository = LocalesProductosRepository(session)
         self.alergeno_repository = ProductoAlergenoRepository(session)
+
+    @staticmethod
+    def _transformar_alergenos_a_schema(producto: ProductoModel) -> List[ProductoAlergeno]:
+        """
+        Transforma los alérgenos de un producto a ProductoAlergeno schema.
+        
+        Parameters
+        ----------
+        producto : ProductoModel
+            Modelo de producto con productos_alergenos cargados.
+            
+        Returns
+        -------
+        List[ProductoAlergeno]
+            Lista de alérgenos transformados con metadatos.
+        """
+        return [
+            ProductoAlergeno.model_validate({
+                'id': pa.alergeno.id,
+                'nombre': pa.alergeno.nombre,
+                'icono': pa.alergeno.icono,
+                'nivel_riesgo': pa.alergeno.nivel_riesgo,
+                'nivel_presencia': pa.nivel_presencia.value if pa.nivel_presencia else 'contiene',
+                'notas': pa.notas
+            })
+            for pa in producto.productos_alergenos
+        ]
+
+    @staticmethod
+    def _agrupar_opciones_por_tipo(producto: ProductoModel) -> List[TipoOpcionConOpcionesSchema]:
+        """
+        Agrupa las opciones del producto por tipo de opción.
+        
+        Transforma producto.opciones (ProductoOpcionModel) en una estructura
+        agrupada por tipo de opción con todas sus opciones correspondientes.
+        
+        Parameters
+        ----------
+        producto : ProductoModel
+            Modelo de producto con opciones cargadas (eager loaded).
+            
+        Returns
+        -------
+        List[TipoOpcionConOpcionesSchema]
+            Lista de tipos de opciones con sus opciones agrupadas y ordenadas.
+        """
+        # Diccionario para agrupar por tipo
+        tipos_dict: Dict[str, Dict] = {}
+        
+        # Agrupar opciones por tipo
+        for opcion in producto.opciones:
+            tipo_id = str(opcion.id_tipo_opcion)
+            
+            # Si es la primera opción de este tipo, crear la estructura
+            if tipo_id not in tipos_dict:
+                tipo_opcion = opcion.tipo_opcion
+                tipos_dict[tipo_id] = {
+                    "id_tipo_opcion": tipo_id,
+                    "nombre_tipo": tipo_opcion.nombre,
+                    "descripcion_tipo": tipo_opcion.descripcion,
+                    "seleccion_minima": tipo_opcion.seleccion_minima,
+                    "seleccion_maxima": tipo_opcion.seleccion_maxima,
+                    "orden_tipo": tipo_opcion.orden if tipo_opcion.orden else 0,
+                    "opciones": []
+                }
+            
+            # Agregar la opción al tipo
+            tipos_dict[tipo_id]["opciones"].append({
+                "id": opcion.id,
+                "nombre": opcion.nombre,
+                "precio_adicional": opcion.precio_adicional,
+                "activo": opcion.activo,
+                "orden": opcion.orden if opcion.orden else 0,
+                "fecha_creacion": opcion.fecha_creacion,
+                "fecha_modificacion": opcion.fecha_modificacion
+            })
+        
+        # Convertir a lista y ordenar
+        tipos_list = list(tipos_dict.values())
+        tipos_list.sort(key=lambda x: x["orden_tipo"])
+        
+        # Ordenar opciones dentro de cada tipo
+        for tipo in tipos_list:
+            tipo["opciones"].sort(key=lambda x: x["orden"])
+        
+        # Convertir a schemas Pydantic
+        return [
+            TipoOpcionConOpcionesSchema(
+                id_tipo_opcion=tipo["id_tipo_opcion"],
+                nombre_tipo=tipo["nombre_tipo"],
+                descripcion_tipo=tipo["descripcion_tipo"],
+                seleccion_minima=tipo["seleccion_minima"],
+                seleccion_maxima=tipo["seleccion_maxima"],
+                orden_tipo=tipo["orden_tipo"],
+                opciones=[
+                    ProductoOpcionDetalleSchema(**opcion)
+                    for opcion in tipo["opciones"]
+                ]
+            )
+            for tipo in tipos_list
+        ]
 
     async def create_producto(self, producto_data: ProductoCreate) -> ProductoResponse:
         """
@@ -124,9 +226,11 @@ class ProductoService:
         if not producto:
             raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
 
-        # Convertir a dict y agregar alérgenos
+        # Convertir a dict
         producto_dict = producto.to_dict()
-        producto_dict['alergenos'] = getattr(producto, '_alergenos', [])
+        
+        # Transformar productos_alergenos usando método helper
+        producto_dict['alergenos'] = self._transformar_alergenos_a_schema(producto)
 
         # Convertir y retornar como esquema de respuesta
         return ProductoResponse.model_validate(producto_dict)
@@ -146,53 +250,9 @@ class ProductoService:
                 f"No se encontró el producto con el ID proporcionado"
             )
 
-        alergenos = await self.alergeno_repository.get_by_producto(producto_id)
-
-        # Agrupar opciones por tipo
-        tipos_dict: dict[str, dict] = {}
-        for opcion in producto.opciones:
-            tipo_id = str(opcion.id_tipo_opcion)
-            if tipo_id not in tipos_dict:
-                tipo_opcion = opcion.tipo_opcion
-                tipos_dict[tipo_id] = {
-                    "id_tipo_opcion": tipo_id,
-                    "nombre_tipo": tipo_opcion.nombre,
-                    "descripcion_tipo": tipo_opcion.descripcion,
-                    "seleccion_minima": tipo_opcion.seleccion_minima,
-                    "seleccion_maxima": tipo_opcion.seleccion_maxima,
-                    "orden_tipo": tipo_opcion.orden if tipo_opcion.orden else 0,
-                    "opciones": []
-                }
-            tipos_dict[tipo_id]["opciones"].append({
-                "id": opcion.id,
-                "nombre": opcion.nombre,
-                "precio_adicional": opcion.precio_adicional,
-                "activo": opcion.activo,
-                "orden": opcion.orden,
-                "fecha_creacion": opcion.fecha_creacion,
-                "fecha_modificacion": opcion.fecha_modificacion
-            })
-
-        tipos_list = list(tipos_dict.values())
-        tipos_list.sort(key=lambda x: x["orden_tipo"])
-        for tipo in tipos_list:
-            tipo["opciones"].sort(key=lambda x: x["orden"])
-
-        tipos_opciones_schemas = [
-            TipoOpcionConOpcionesSchema(
-                id_tipo_opcion=tipo["id_tipo_opcion"],
-                nombre_tipo=tipo["nombre_tipo"],
-                descripcion_tipo=tipo["descripcion_tipo"],
-                seleccion_minima=tipo["seleccion_minima"],
-                seleccion_maxima=tipo["seleccion_maxima"],
-                orden_tipo=tipo["orden_tipo"],
-                opciones=[
-                    ProductoOpcionDetalleSchema(**opcion)
-                    for opcion in tipo["opciones"]
-                ]
-            )
-            for tipo in tipos_list
-        ]
+        # Transformar alérgenos y opciones usando métodos helpers
+        alergenos_detallados = self._transformar_alergenos_a_schema(producto)
+        tipos_opciones_schemas = self._agrupar_opciones_por_tipo(producto)
 
         return ProductoConOpcionesResponse(
             id=producto.id,
@@ -204,7 +264,7 @@ class ProductoService:
             id_categoria=str(producto.id_categoria),
             disponible=producto.disponible,
             destacado=producto.destacado,
-            alergenos=alergenos,
+            alergenos=alergenos_detallados,
             fecha_creacion=producto.fecha_creacion,
             fecha_modificacion=producto.fecha_modificacion,
             tipos_opciones=tipos_opciones_schemas
@@ -634,12 +694,9 @@ class ProductoService:
 
             # Actualizar datos básicos del producto
             update_data = {
-                "nombre": producto_data.nombre,
                 "descripcion": producto_data.descripcion,
-                "precio_base": producto_data.precio_base,
                 "imagen_path": producto_data.imagen_path,
                 "imagen_alt_text": producto_data.imagen_alt_text,
-                "id_categoria": producto_data.id_categoria,
                 "disponible": producto_data.disponible,
                 "destacado": producto_data.destacado,
             }
@@ -712,11 +769,6 @@ class ProductoService:
             return ProductoConOpcionesResponse.model_validate(response_data)
 
         except IntegrityError as e:
-            # Capturar errores de integridad
-            if "nombre" in str(e):
-                raise ProductoConflictError(
-                    f"Ya existe un producto con el nombre '{producto_data.nombre}'"
-                )
             raise ProductoValidationError(f"Error de integridad en los datos: {str(e)}")
         except Exception as e:
             # Capturar otros errores y convertir a excepción de validación

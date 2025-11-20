@@ -11,6 +11,7 @@ from src.repositories.mesas.mesa_repository import MesaRepository
 from src.repositories.mesas.locales_productos_opciones_repository import LocalesProductosOpcionesRepository
 from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
 from src.api.schemas.producto_opcion_schema import (
+    ProductoOpcionBase,
     ProductoOpcionCreate,
     ProductoOpcionUpdate,
     ProductoOpcionResponse,
@@ -387,3 +388,27 @@ class ProductoOpcionService:
             raise
         except Exception as e:
             raise ProductoOpcionConflictError(f"Error al eliminar las opciones de productos: {e}") from e
+        
+    def convert_base_to_create(
+        self, producto_opcion: ProductoOpcionBase, id_producto: str, id_tipo_opcion: str
+    ) -> ProductoOpcionCreate:
+        """
+        Asigna un ID de producto a una opción de producto.
+
+        Parameters
+        ----------
+        producto_opcion : ProductoOpcionBase
+            Opción de producto a la que se le asignará el ID de producto.
+        id_producto : str
+            ID del producto a asignar.
+        id_tipo_opcion : str
+            ID del tipo de opción a asignar.
+        """
+        return ProductoOpcionCreate(
+            id_producto=id_producto,
+            id_tipo_opcion=id_tipo_opcion,
+            nombre=producto_opcion.nombre,
+            precio_adicional=producto_opcion.precio_adicional,
+            activo=producto_opcion.activo,
+            orden=producto_opcion.orden,
+        )

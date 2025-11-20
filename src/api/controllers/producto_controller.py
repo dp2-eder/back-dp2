@@ -480,6 +480,12 @@ async def update_producto_completo(
             - 409: Si hay conflictos (ej. nombre duplicado).
             - 500: Si ocurre un error interno del servidor.
     """
+    if current_admin is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales inválidas para realizar esta operación.",
+        )
+
     try:
         producto_service = ProductoService(session)
         return await producto_service.update_producto_completo(producto_id, producto_data)

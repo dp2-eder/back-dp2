@@ -27,7 +27,7 @@ async def get_current_admin(
     if payload is None:
         raise credentials_exception
 
-    admin_id: str = payload.get("sub")
+    admin_id: str | None = payload.get("sub")
     if admin_id is None:
         raise credentials_exception
 
