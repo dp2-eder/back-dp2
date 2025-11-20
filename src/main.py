@@ -188,6 +188,7 @@ def register_routers(app: FastAPI) -> None:
         ("src.api.controllers.producto_controller", "Productos"),
         ("src.api.controllers.tipo_opciones_controller", "Tipos de Opciones"),
         ("src.api.controllers.producto_opcion_controller", "Producto Opciones"),
+        ("src.api.controllers.producto_opciones_manage_controller", "Gestión de Opciones de Productos"),
         ("src.api.controllers.sync_controller", "Sincronización"),
         ("src.api.controllers.mesa_controller", "Mesas"),
         ("src.api.controllers.pedido_controller", "Pedidos"),
