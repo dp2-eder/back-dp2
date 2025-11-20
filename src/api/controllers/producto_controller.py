@@ -10,6 +10,7 @@ from src.core.database import get_database_session
 from src.business_logic.menu.producto_service import ProductoService
 from src.business_logic.menu.producto_img_service import ProductoImagenService
 from src.api.schemas.producto_schema import (
+    ProductoBase,
     ProductoCreate,
     ProductoResponse,
     ProductoUpdate,
@@ -17,6 +18,7 @@ from src.api.schemas.producto_schema import (
     ProductoCardList,
     ProductoConOpcionesResponse,
     ProductoCompletoUpdateSchema,
+    ProductoImagenResponse,
 )
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
@@ -446,6 +448,7 @@ async def delete_producto(
 
 @router.post(
     "/{producto_id}/imagen",
+    response_model=ProductoImagenResponse,
     status_code=status.HTTP_200_OK,
     summary="Subir imagen de producto",
     description="Sube una imagen para un producto específico. La imagen se guarda con el ID del producto como nombre.",
@@ -455,7 +458,7 @@ async def upload_producto_imagen(
     file: UploadFile = File(..., description="Archivo de imagen (JPG, PNG, WEBP)"),
     session: AsyncSession = Depends(get_database_session),
     current_admin = Depends(get_current_admin)
-):
+) -> ProductoImagenResponse:
     """
     Sube una imagen para un producto específico.
 
@@ -493,7 +496,13 @@ async def upload_producto_imagen(
     try:
         # Verificar que el producto existe
         producto_service = ProductoService(session)
-        await producto_service.get_producto_by_id(producto_id)
+        producto = await producto_service.repository.get_by_id(producto_id)
+        
+        if not producto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se encontró el producto con ID {producto_id}"
+            )
 
         # Guardar imagen
         imagen_path = await ProductoImagenService.save_producto_image(
@@ -502,23 +511,20 @@ async def upload_producto_imagen(
             optimize=True
         )
 
-        # Actualizar el campo imagen_path del producto
-        await producto_service.update_producto(
-            producto_id,
-            ProductoUpdate(imagen_path=imagen_path)
-        )
+        # Actualizar el campo imagen_path directamente en el repositorio (sin validación de alérgenos)
+        await producto_service.repository.update(producto_id, imagen_path=imagen_path)
 
-        return {
-            "message": "Imagen subida exitosamente",
-            "producto_id": producto_id,
-            "imagen_path": imagen_path,
-            "filename": file.filename
-        }
+        return ProductoImagenResponse(
+            message="Imagen subida exitosamente",
+            producto_id=producto_id,
+            imagen_path=imagen_path,
+            filename=file.filename
+        )
 
     except ProductoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except HTTPException:
-        raise  # Re-lanzar excepciones HTTP del servicio
+        raise  # Re-lanzar excepciones HTTP ya creadas
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -528,6 +534,7 @@ async def upload_producto_imagen(
 
 @router.delete(
     "/{producto_id}/imagen",
+    response_model=ProductoImagenResponse,
     status_code=status.HTTP_200_OK,
     summary="Eliminar imagen de producto",
     description="Elimina la imagen asociada a un producto.",
@@ -536,7 +543,7 @@ async def delete_producto_imagen(
     producto_id: str,
     session: AsyncSession = Depends(get_database_session),
     current_admin = Depends(get_current_admin)
-):
+) -> ProductoImagenResponse:
     """
     Elimina la imagen asociada a un producto.
 
@@ -562,7 +569,13 @@ async def delete_producto_imagen(
 
     try:
         producto_service = ProductoService(session)
-        await producto_service.get_producto_by_id(producto_id)
+        producto = await producto_service.repository.get_by_id(producto_id)
+        
+        if not producto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se encontró el producto con ID {producto_id}"
+            )
 
         deleted = ProductoImagenService.delete_producto_image(producto_id)
 
@@ -572,20 +585,20 @@ async def delete_producto_imagen(
                 detail="No se encontró ninguna imagen para este producto"
             )
 
-        await producto_service.update_producto(
-            producto_id,
-            ProductoUpdate(imagen_path=None)
-        )
+        # Actualizar imagen_path a None directamente en el repositorio
+        await producto_service.repository.update(producto_id, imagen_path=None)
 
-        return {
-            "message": "Imagen eliminada exitosamente",
-            "producto_id": producto_id
-        }
+        return ProductoImagenResponse(
+            message="Imagen eliminada exitosamente",
+            producto_id=producto_id,
+            imagen_path=None,
+            filename=None
+        )
 
     except ProductoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except HTTPException:
-        raise
+        raise  # Re-lanzar excepciones HTTP ya creadas
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

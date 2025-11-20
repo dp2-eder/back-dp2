@@ -6,8 +6,11 @@ from src.repositories.menu.producto_alergeno_repository import ProductoAlergenoR
 from src.repositories.menu.producto_repository import ProductoRepository
 from src.repositories.mesas.mesa_repository import MesaRepository
 from src.repositories.mesas.locales_productos_repository import LocalesProductosRepository
+from src.repositories.pedidos.tipo_opciones_repository import TipoOpcionRepository
+from src.repositories.pedidos.producto_opcion_repository import ProductoOpcionRepository
 from src.models.menu.producto_model import ProductoModel
 from src.api.schemas.producto_schema import (
+    ProductoBase,
     ProductoCreate,
     ProductoUpdate,
     ProductoResponse,
@@ -21,6 +24,8 @@ from src.api.schemas.producto_schema import (
     ProductoCompletoUpdateSchema
 )
 from src.api.schemas.alergeno_schema import ProductoAlergeno
+from src.api.schemas.tipo_opciones_schema import TipoOpcionCreate
+from src.api.schemas.producto_opcion_schema import ProductoOpcionCreate
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
     ProductoNotFoundError,
@@ -54,6 +59,8 @@ class ProductoService:
         self.mesa_repository = MesaRepository(session)
         self.locales_productos_repository = LocalesProductosRepository(session)
         self.alergeno_repository = ProductoAlergenoRepository(session)
+        self.tipo_opciones_repository = TipoOpcionRepository(session)
+        self.producto_opcion_repository = ProductoOpcionRepository(session)
 
     @staticmethod
     def _transformar_alergenos_a_schema(producto: ProductoModel) -> List[ProductoAlergeno]:
@@ -467,7 +474,8 @@ class ProductoService:
             # Normalizar el nombre antes de retornar
             updated_producto.nombre = normalize_product_name(updated_producto.nombre)
 
-            # Convertir y retornar como esquema de respuesta
+            updated_producto = await self.repository.get_by_id(producto_id)
+            # Convertir y retornar como esquema base
             return ProductoResponse.model_validate(updated_producto)
         except IntegrityError:
             # Capturar errores de integridad (nombre duplicado)
@@ -687,84 +695,99 @@ class ProductoService:
             Si los datos de entrada son inválidos.
         """
         try:
-            # Verificar que el producto existe
+            # 1. Verificar que el producto existe
             producto = await self.repository.get_by_id(producto_id)
             if not producto:
                 raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
 
-            # Actualizar datos básicos del producto
+            # 2. Actualizar datos básicos del producto
             update_data = {
                 "descripcion": producto_data.descripcion,
                 "disponible": producto_data.disponible,
                 "destacado": producto_data.destacado,
             }
+            await self.repository.update(producto_id, **update_data)
 
-            # Actualizar el producto base usando **kwargs
-            updated_producto = await self.repository.update(producto_id, **update_data)
+            # 3. Actualizar alérgenos (dejarlo como está - usar servicio existente)
+            # TODO: Implementar actualización de alérgenos si es necesario
+            
+            # 4. Eliminar todos los tipos de opciones y opciones existentes del producto
+            # Obtener todas las opciones del producto filtrando por id_producto
+            from sqlalchemy import select, delete as sql_delete
+            from src.models.pedidos.producto_opcion_model import ProductoOpcionModel as OpcionModel
+            
+            query = select(OpcionModel).where(OpcionModel.id_producto == producto_id)
+            result = await self.session.execute(query)
+            opciones_existentes = result.scalars().all()
+            opciones_ids = [opcion.id for opcion in opciones_existentes]
+            
+            # Eliminar en batch todas las opciones
+            if opciones_ids:
+                delete_stmt = sql_delete(OpcionModel).where(OpcionModel.id.in_(opciones_ids))
+                await self.session.execute(delete_stmt)
+                await self.session.flush()
 
-            # TODO: Actualizar alérgenos del producto
-            # await self._update_producto_alergenos(producto_id, producto_data.alergenos)
+            # 5. Crear nuevos tipos de opciones y opciones según la información recibida
+            for seccion in producto_data.secciones:
+                # 5.1. Crear o verificar el tipo de opción
+                tipo_opcion_data = seccion.tipo_opcion
+                
+                # Buscar si ya existe el tipo de opción por código
+                tipo_opcion_existente = await self.tipo_opciones_repository.get_by_codigo(
+                    tipo_opcion_data.codigo
+                )
+                
+                if tipo_opcion_existente:
+                    # Usar el existente
+                    id_tipo_opcion = tipo_opcion_existente.id
+                else:
+                    # Crear nuevo tipo de opción
+                    from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
+                    nuevo_tipo_model = TipoOpcionModel(**tipo_opcion_data.model_dump())
+                    nuevo_tipo = await self.tipo_opciones_repository.create(nuevo_tipo_model)
+                    id_tipo_opcion = nuevo_tipo.id
 
-            # TODO: Actualizar secciones del producto
-            # await self._update_producto_secciones(producto_id, producto_data.secciones)
+                # 5.2. Crear todas las opciones de esta sección en batch
+                from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
+                opciones_models = [
+                    ProductoOpcionModel(
+                        id_producto=producto_id,
+                        id_tipo_opcion=id_tipo_opcion,
+                        nombre=opcion.nombre,
+                        precio_adicional=opcion.precio_adicional,
+                        activo=opcion.activo,
+                        orden=opcion.orden
+                    )
+                    for opcion in seccion.opciones
+                ]
+                
+                if opciones_models:
+                    await self.producto_opcion_repository.create_batch(opciones_models)
 
-            # TODO: Actualizar tipos de opciones y opciones del producto
-            # await self._update_producto_tipos_opciones(producto_id, producto_data.tipos_opciones)
-
-            # Obtener el producto actualizado con todas sus relaciones
+            # 6. Obtener el producto actualizado con todas sus relaciones
             producto_completo = await self.repository.get_by_id_with_opciones(producto_id)
             if not producto_completo:
-                raise ProductoNotFoundError(f"Error al obtener el producto actualizado con ID {producto_id}")
+                raise ProductoNotFoundError(f"Error al recuperar el producto actualizado con ID {producto_id}")
 
-            # Normalizar nombres antes de retornar
-            producto_completo.nombre = normalize_product_name(producto_completo.nombre)
+            # 7. Transformar y retornar respuesta
+            alergenos_detallados = self._transformar_alergenos_a_schema(producto_completo)
+            tipos_opciones_schemas = self._agrupar_opciones_por_tipo(producto_completo)
 
-            # Transformar y estructurar los datos de opciones por tipo
-            tipos_opciones_response = []
-            if hasattr(producto_completo, 'opciones') and producto_completo.opciones:
-                # Agrupar opciones por tipo
-                tipos_dict = {}
-                for opcion in producto_completo.opciones:
-                    tipo_id = opcion.tipo_opcion.id
-                    if tipo_id not in tipos_dict:
-                        tipos_dict[tipo_id] = {
-                            "id_tipo_opcion": opcion.tipo_opcion.id,
-                            "nombre_tipo": opcion.tipo_opcion.nombre,
-                            "descripcion_tipo": opcion.tipo_opcion.descripcion,
-                            "seleccion_minima": opcion.tipo_opcion.seleccion_minima,
-                            "seleccion_maxima": opcion.tipo_opcion.seleccion_maxima,
-                            "orden_tipo": opcion.tipo_opcion.orden,
-                            "opciones": []
-                        }
-
-                    tipos_dict[tipo_id]["opciones"].append(
-                        ProductoOpcionDetalleSchema.model_validate(opcion)
-                    )
-
-                # Convertir el diccionario a lista ordenada por orden_tipo
-                tipos_opciones_response = [
-                    TipoOpcionConOpcionesSchema.model_validate(tipo_data)
-                    for tipo_data in sorted(tipos_dict.values(), key=lambda x: x["orden_tipo"])
-                ]
-
-            # Construir respuesta con estructura completa
-            response_data = {
-                "id": producto_completo.id,
-                "nombre": producto_completo.nombre,
-                "descripcion": producto_completo.descripcion,
-                "precio_base": producto_completo.precio_base,
-                "imagen_path": producto_completo.imagen_path,
-                "imagen_alt_text": producto_completo.imagen_alt_text,
-                "id_categoria": producto_completo.id_categoria,
-                "disponible": producto_completo.disponible,
-                "destacado": producto_completo.destacado,
-                "alergenos": producto_completo.alergenos if hasattr(producto_completo, 'alergenos') else [],
-                "fecha_creacion": producto_completo.fecha_creacion,
-                "fecha_modificacion": producto_completo.fecha_modificacion,
-                "tipos_opciones": tipos_opciones_response
-            }
-
-            return ProductoConOpcionesResponse.model_validate(response_data)
+            return ProductoConOpcionesResponse(
+                id=producto_completo.id,
+                nombre=normalize_product_name(producto_completo.nombre),
+                descripcion=producto_completo.descripcion,
+                precio_base=producto_completo.precio_base,
+                imagen_path=producto_completo.imagen_path,
+                imagen_alt_text=producto_completo.imagen_alt_text,
+                id_categoria=str(producto_completo.id_categoria),
+                disponible=producto_completo.disponible,
+                destacado=producto_completo.destacado,
+                alergenos=alergenos_detallados,
+                fecha_creacion=producto_completo.fecha_creacion,
+                fecha_modificacion=producto_completo.fecha_modificacion,
+                tipos_opciones=tipos_opciones_schemas
+            )
 
         except IntegrityError as e:
             raise ProductoValidationError(f"Error de integridad en los datos: {str(e)}")

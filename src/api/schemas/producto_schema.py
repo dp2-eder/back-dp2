@@ -238,4 +238,15 @@ class ProductoCompletoUpdateSchema(BaseModel):
     # Relaciones
     alergenos: List[str] = Field(description="Lista de IDs de alérgenos")
     secciones: List[SeccionProductoSchema] = Field(description="Lista de secciones con opciones")
+
+
+class ProductoImagenResponse(BaseModel):
+    """Schema para respuesta de operaciones con imágenes de productos."""
+    
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+    
+    message: str = Field(description="Mensaje de confirmación")
+    producto_id: str = Field(description="ID del producto")
+    imagen_path: Optional[str] = Field(default=None, description="Ruta de la imagen (nombre del archivo)")
+    filename: Optional[str] = Field(default=None, description="Nombre original del archivo subido")
     

@@ -188,21 +188,17 @@ class ProductoRepository:
                 update(ProductoModel)
                 .where(ProductoModel.id == producto_id)
                 .values(**valid_fields)
-                .returning(ProductoModel)
             )
 
             result = await self.session.execute(stmt)
             await self.session.commit()
 
-            # Obtener el resultado actualizado
-            updated_producto = result.scalars().first()
-
-            # Si no se encontró el producto, retornar None
-            if not updated_producto:
+            # Verificar si se actualizó alguna fila
+            if result.rowcount == 0:
                 return None
 
-            # Refrescar el objeto desde la base de datos
-            await self.session.refresh(updated_producto)
+            # Obtener el producto actualizado desde la base de datos
+            updated_producto = await self.get_by_id(producto_id)
 
             return updated_producto
         except SQLAlchemyError:
