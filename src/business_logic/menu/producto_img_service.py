@@ -148,8 +148,7 @@ class ProductoImagenService:
                 detail=f"Error al guardar la imagen: {str(e)}"
             )
 
-        # Retornar ruta relativa
-        return f"/static/images/{filename}"
+        return filename
 
     @classmethod
     def delete_producto_image(cls, producto_id: str) -> bool:
@@ -180,7 +179,7 @@ class ProductoImagenService:
     @classmethod
     def get_producto_image_path(cls, producto_id: str) -> Optional[str]:
         """
-        Obtiene la ruta de la imagen de un producto si existe.
+        Obtiene el nombre del archivo de imagen de un producto si existe.
 
         Parameters
         ----------
@@ -190,12 +189,12 @@ class ProductoImagenService:
         Returns
         -------
         Optional[str]
-            Ruta relativa de la imagen o None si no existe.
+            Nombre del archivo (ej: "123abc.jpg") o None si no existe.
         """
         # Buscar archivo con cualquier extensión permitida
         for ext in cls.ALLOWED_EXTENSIONS:
             filepath = cls.STATIC_DIR / f"{producto_id}.{ext}"
             if filepath.exists():
-                return f"/static/images/{producto_id}.{ext}"
+                return f"{producto_id}.{ext}"
 
         return None
