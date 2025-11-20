@@ -13,8 +13,8 @@ from ulid import ULID
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'add_simple_pk_pa'
-down_revision: Union[str, None] = '<previous_revision>'  # REEMPLAZAR CON ÚLTIMA REVISIÓN
+revision: str = 'add_simple_pk_to_producto_alergeno'
+down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '20251111_add_usuario_creador'
+revision = '20251111_add_id_usuario_creador_to_sesiones_mesas'
 down_revision = '20251110_add_id_sesion_mesa_to_pedidos'
 branch_labels = None
 depends_on = None

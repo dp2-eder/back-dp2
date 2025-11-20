@@ -27,6 +27,9 @@ Gestión completa de productos del menú. Permite crear, listar, consultar, actu
 - **[GET /productos/{producto_id}/opciones](endpoints/GET_productos_producto_id_opciones.md)** — ⭐ Obtiene producto con sus **opciones** agrupadas por tipo
 - **[GET /productos/{producto_id}/alergenos](endpoints/GET_productos_producto_id_alergenos.md)** — ⭐ Obtiene **alérgenos** de un producto
 
+### Actualización Masiva
+- **[PUT /productos/{producto_id}/completo](endpoints/PUT_productos_producto_id_completo.md)** — 🔥 Actualiza **completamente** un producto con todos sus datos: básicos, alérgenos, secciones y opciones en una sola operación
+
 ## Schema Principal
 
 ```json

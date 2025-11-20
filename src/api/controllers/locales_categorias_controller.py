@@ -2,7 +2,7 @@
 Endpoints para gestión de relaciones Local-Categoría.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
@@ -38,7 +38,7 @@ router = APIRouter(
 )
 async def create_relacion(
     id_local: str = Path(..., description="ID del local"),
-    relacion_data: LocalesCategoriasCreate = ...,
+    relacion_data: LocalesCategoriasCreate = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesCategoriasResponse:
     """
@@ -175,7 +175,7 @@ async def get_relacion(
 async def update_relacion(
     id_local: str = Path(..., description="ID del local"),
     relacion_id: str = Path(..., description="ID de la relación"),
-    relacion_data: LocalesCategoriasUpdate = ...,
+    relacion_data: LocalesCategoriasUpdate = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesCategoriasResponse:
     """
@@ -255,7 +255,7 @@ async def delete_relacion(
 )
 async def activar_categoria(
     id_local: str = Path(..., description="ID del local"),
-    request: ActivarCategoriaRequest = ...,
+    request: ActivarCategoriaRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesCategoriasResponse:
     """
@@ -297,7 +297,7 @@ async def activar_categoria(
 )
 async def desactivar_categoria(
     id_local: str = Path(..., description="ID del local"),
-    request: DesactivarCategoriaRequest = ...,
+    request: DesactivarCategoriaRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesCategoriasResponse:
     """
@@ -337,7 +337,7 @@ async def desactivar_categoria(
 )
 async def activar_categorias_lote(
     id_local: str = Path(..., description="ID del local"),
-    request: ActivarCategoriasLoteRequest = ...,
+    request: ActivarCategoriasLoteRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> OperacionLoteResponse:
     """

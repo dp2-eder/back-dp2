@@ -159,7 +159,9 @@ class SesionMesaModel(BaseModel, AuditMixin):
         datetime
             Fecha y hora de expiración de la sesión.
         """
-        return self.fecha_inicio + timedelta(minutes=self.duracion_minutos)
+        # Si no hay duración configurada, usar 120 minutos por defecto
+        duracion = self.duracion_minutos if self.duracion_minutos is not None else 120
+        return self.fecha_inicio + timedelta(minutes=duracion)
 
     def esta_expirada(self) -> bool:
         """
@@ -172,6 +174,10 @@ class SesionMesaModel(BaseModel, AuditMixin):
         """
         if self.estado == EstadoSesionMesa.FINALIZADA:
             return True
+
+        # Si no hay fecha de inicio, no puede estar expirada
+        if not self.fecha_inicio:
+            return False
 
         return datetime.now() > self.calcular_fecha_expiracion()
 

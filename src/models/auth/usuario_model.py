@@ -1,9 +1,12 @@
-from typing import Any, Dict, Optional, Type, TypeVar
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Index, TIMESTAMP
+from typing import Any, Dict, Optional, Type, TypeVar, TYPE_CHECKING
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Index, TIMESTAMP, ForeignKey
 from datetime import datetime
 from src.models.base_model import BaseModel
 from src.models.mixins.audit_mixin import AuditMixin
+
+if TYPE_CHECKING:
+    from src.models.auth.rol_model import RolModel
 
 T = TypeVar("T", bound="UsuarioModel")
 
@@ -36,6 +39,19 @@ class UsuarioModel(BaseModel, AuditMixin):
         nullable=True,
         default=None,
         comment="Última vez que el usuario accedió al sistema"
+    )
+    id_rol: Mapped[Optional[str]] = mapped_column(
+        String(26),
+        ForeignKey('roles.id', ondelete='SET NULL'),
+        nullable=True,
+        default=None,
+        comment="ID del rol asignado al usuario",
+        index=True
+    )
+    rol: Mapped[Optional["RolModel"]] = relationship(
+        "RolModel",
+        backref="usuarios",
+        lazy="joined"
     )
 
     @staticmethod

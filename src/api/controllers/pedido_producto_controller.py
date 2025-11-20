@@ -13,6 +13,7 @@ from src.api.schemas.pedido_producto_schema import (
     PedidoProductoResponse,
     PedidoProductoUpdate,
     PedidoProductoList,
+    PedidoItemList,
 )
 from src.business_logic.exceptions.pedido_producto_exceptions import (
     PedidoProductoValidationError,
@@ -103,14 +104,14 @@ async def get_pedido_producto(
 
 @router.get(
     "/pedido/{pedido_id}/items",
-    response_model=PedidoProductoList,
+    response_model=PedidoItemList,
     status_code=status.HTTP_200_OK,
     summary="Obtener items de un pedido",
-    description="Obtiene todos los items de un pedido específico.",
+    description="Obtiene todos los items de un pedido específico con sus opciones.",
 )
 async def get_items_by_pedido(
     pedido_id: str, session: AsyncSession = Depends(get_database_session)
-) -> PedidoProductoList:
+) -> PedidoItemList:
     """
     Obtiene todos los items de un pedido específico.
 

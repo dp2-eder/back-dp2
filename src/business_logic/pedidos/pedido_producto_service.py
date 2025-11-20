@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.repositories.pedidos.pedido_producto_repository import PedidoProductoRepository
 from src.repositories.pedidos.pedido_repository import PedidoRepository
+from src.repositories.pedidos.pedido_opcion_repository import PedidoOpcionRepository
 from src.repositories.menu.producto_repository import ProductoRepository
 from src.models.pedidos.pedido_producto_model import PedidoProductoModel
 from src.api.schemas.pedido_producto_schema import (
@@ -18,7 +19,9 @@ from src.api.schemas.pedido_producto_schema import (
     PedidoProductoResponse,
     PedidoProductoSummary,
     PedidoProductoList,
+    PedidoItemList,
 )
+from src.api.schemas.pedido_schema import PedidoItemResponse
 from src.business_logic.exceptions.pedido_producto_exceptions import (
     PedidoProductoValidationError,
     PedidoProductoNotFoundError,
@@ -54,6 +57,7 @@ class PedidoProductoService:
         """
         self.repository = PedidoProductoRepository(session)
         self.pedido_repository = PedidoRepository(session)
+        self.pedido_opcion_repository = PedidoOpcionRepository(session)
         self.producto_repository = ProductoRepository(session)
 
     async def create_pedido_producto(
@@ -157,9 +161,9 @@ class PedidoProductoService:
         # Convertir y retornar como esquema de respuesta
         return PedidoProductoResponse.model_validate(item)
 
-    async def get_productos_by_pedido(self, pedido_id: str) -> PedidoProductoList:
+    async def get_productos_by_pedido(self, pedido_id: str) -> PedidoItemList:
         """
-        Obtiene todos los items de un pedido específico.
+        Obtiene todos los items de un pedido específico con sus opciones.
 
         Parameters
         ----------
@@ -168,8 +172,8 @@ class PedidoProductoService:
 
         Returns
         -------
-        PedidoProductoList
-            Esquema con la lista de items del pedido.
+        PedidoItemList
+            Esquema con la lista de items del pedido incluyendo opciones.
 
         Raises
         ------
@@ -186,11 +190,26 @@ class PedidoProductoService:
         # Obtener items del pedido
         items = await self.repository.get_by_pedido_id(pedido_id)
 
-        # Convertir modelos a esquemas de resumen
-        item_summaries = [PedidoProductoSummary.model_validate(item) for item in items]
+        # Construir la lista de items con sus opciones
+        items_response = []
+        for item in items:
+            # Obtener opciones del item
+            opciones = await self.pedido_opcion_repository.get_by_pedido_producto_id(item.id)
+            # Extraer los IDs de las opciones
+            opciones_ids = [opcion.id_producto_opcion for opcion in opciones]
+            
+            # Crear el item response
+            item_response = PedidoItemResponse(
+                id_producto=item.id_producto,
+                cantidad=item.cantidad,
+                precio_unitario=item.precio_unitario,
+                opciones=opciones_ids,
+                notas_personalizacion=item.notas_personalizacion
+            )
+            items_response.append(item_response)
 
         # Retornar esquema de lista
-        return PedidoProductoList(items=item_summaries, total=len(items))
+        return PedidoItemList(items=items_response, total=len(items_response))
 
     async def delete_pedido_producto(self, item_id: str) -> bool:
         """

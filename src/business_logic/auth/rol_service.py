@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from src.repositories.auth.rol_repository import RolRepository
+from src.repositories.auth.usuario_repository import UsuarioRepository
 from src.models.auth.rol_model import RolModel
 from src.api.schemas.rol_schema import (
     RolCreate,
@@ -43,6 +44,7 @@ class RolService:
             Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
         """
         self.repository = RolRepository(session)
+        self.usuario_repository = UsuarioRepository(session)
 
     async def create_rol(self, rol_data: RolCreate) -> RolResponse:
         """
@@ -217,3 +219,39 @@ class RolService:
                 )
             # Si no es por nombre, reenviar la excepción original
             raise
+
+    async def get_nombre_rol_by_usuario_id(self, usuario_id: str) -> dict:
+        """
+        Obtiene el nombre del rol de un usuario por su ID.
+
+        Parameters
+        ----------
+        usuario_id : str
+            Identificador único del usuario (ULID).
+
+        Returns
+        -------
+        dict
+            Diccionario con el nombre del rol: {"nombre_rol": "COMENSAL"}
+
+        Raises
+        ------
+        RolNotFoundError
+            Si no se encuentra el usuario, no tiene rol asignado, o el rol no existe.
+        """
+        # Buscar el usuario por su ID
+        usuario = await self.usuario_repository.get_by_id(usuario_id)
+        if not usuario:
+            raise RolNotFoundError(f"No se encontró el usuario con ID {usuario_id}")
+
+        # Verificar que el usuario tenga un rol asignado
+        if not usuario.id_rol:
+            raise RolNotFoundError(f"El usuario con ID {usuario_id} no tiene un rol asignado")
+
+        # Buscar el rol por su ID
+        rol = await self.repository.get_by_id(usuario.id_rol)
+        if not rol:
+            raise RolNotFoundError(f"No se encontró el rol con ID {usuario.id_rol}")
+
+        # Retornar solo el nombre del rol
+        return {"nombre_rol": rol.nombre}

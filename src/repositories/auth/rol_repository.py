@@ -81,6 +81,24 @@ class RolRepository:
         result = await self.session.execute(query)
         return result.scalars().first()
 
+    async def get_by_nombre(self, nombre: str) -> Optional[RolModel]:
+        """
+        Obtiene un rol por su nombre.
+
+        Parameters
+        ----------
+        nombre : str
+            Nombre del rol a buscar.
+
+        Returns
+        -------
+        Optional[RolModel]
+            El rol encontrado o None si no existe.
+        """
+        query = select(RolModel).where(RolModel.nombre == nombre)
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
     async def delete(self, rol_id: str) -> bool:
         """
         Elimina un rol de la base de datos por su ID.

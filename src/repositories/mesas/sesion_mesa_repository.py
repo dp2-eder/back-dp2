@@ -126,6 +126,9 @@ class SesionMesaRepository:
         """
         Obtiene una sesión activa para una mesa específica.
 
+        Si existen múltiples sesiones activas (situación anómala),
+        retorna la más reciente por fecha_inicio.
+
         Parameters
         ----------
         id_mesa : str
@@ -134,7 +137,7 @@ class SesionMesaRepository:
         Returns
         -------
         Optional[SesionMesaModel]
-            La sesión activa encontrada, o None si no existe.
+            La sesión activa encontrada (la más reciente si hay múltiples), o None si no existe.
 
         Raises
         ------
@@ -142,12 +145,16 @@ class SesionMesaRepository:
             Si ocurre un error durante la operación en la base de datos.
         """
         try:
-            stmt = select(SesionMesaModel).where(
-                SesionMesaModel.id_mesa == id_mesa,
-                SesionMesaModel.estado == EstadoSesionMesa.ACTIVA,
+            stmt = (
+                select(SesionMesaModel)
+                .where(
+                    SesionMesaModel.id_mesa == id_mesa,
+                    SesionMesaModel.estado == EstadoSesionMesa.ACTIVA,
+                )
+                .order_by(SesionMesaModel.fecha_inicio.desc())
             )
             result = await self.session.execute(stmt)
-            return result.scalar_one_or_none()
+            return result.scalars().first()
         except SQLAlchemyError:
             raise
 
@@ -432,7 +439,7 @@ class SesionMesaRepository:
             # Contar total antes de aplicar paginación
             count_stmt = select(func.count()).select_from(stmt.alias())
             total_result = await self.session.execute(count_stmt)
-            total = total_result.scalar()
+            total = total_result.scalar() or 0
 
             # Aplicar ordenamiento y paginación
             stmt = (
