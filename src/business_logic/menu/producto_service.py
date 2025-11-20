@@ -695,8 +695,6 @@ class ProductoService:
             # Actualizar datos básicos del producto
             update_data = {
                 "descripcion": producto_data.descripcion,
-                "imagen_path": producto_data.imagen_path,
-                "imagen_alt_text": producto_data.imagen_alt_text,
                 "disponible": producto_data.disponible,
                 "destacado": producto_data.destacado,
             }

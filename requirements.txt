@@ -31,6 +31,7 @@ orjson==3.11.3
 packaging==25.0
 passlib==1.7.4
 bcrypt==4.2.1
+Pillow==11.1.0
 pluggy==1.6.0
 pyasn1==0.6.1
 python-ulid==2.7.0

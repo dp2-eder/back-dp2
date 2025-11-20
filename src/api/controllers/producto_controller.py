@@ -3,11 +3,12 @@ Endpoints para gestión de productos.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
 from src.business_logic.menu.producto_service import ProductoService
+from src.business_logic.menu.producto_img_service import ProductoImagenService
 from src.api.schemas.producto_schema import (
     ProductoCreate,
     ProductoResponse,
@@ -440,6 +441,155 @@ async def delete_producto(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",
+        )
+
+
+@router.post(
+    "/{producto_id}/imagen",
+    status_code=status.HTTP_200_OK,
+    summary="Subir imagen de producto",
+    description="Sube una imagen para un producto específico. La imagen se guarda con el ID del producto como nombre.",
+)
+async def upload_producto_imagen(
+    producto_id: str,
+    file: UploadFile = File(..., description="Archivo de imagen (JPG, PNG, WEBP)"),
+    session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
+):
+    """
+    Sube una imagen para un producto específico.
+
+    La imagen se guardará en app/static/images/ con el nombre {producto_id}.{extension}.
+    Si ya existe una imagen para el producto, será reemplazada.
+
+    Validaciones:
+    - Formatos permitidos: JPG, JPEG, PNG, WEBP
+    - Tamaño máximo: 5 MB
+    - Dimensiones máximas: 2048x2048 px
+    - La imagen será optimizada automáticamente
+
+    Args:
+        producto_id: ID del producto (ULID).
+        file: Archivo de imagen a subir.
+        session: Sesión de base de datos.
+        current_admin: Usuario administrador autenticado.
+
+    Returns:
+        Información sobre la imagen guardada.
+
+    Raises:
+        HTTPException:
+            - 400: Si el archivo no es válido o excede límites.
+            - 401: Si no está autenticado como administrador.
+            - 404: Si el producto no existe.
+            - 500: Si ocurre un error al guardar la imagen.
+    """
+    if current_admin is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Se requiere autenticación de administrador"
+        )
+
+    try:
+        # Verificar que el producto existe
+        producto_service = ProductoService(session)
+        await producto_service.get_producto_by_id(producto_id)
+
+        # Guardar imagen
+        imagen_path = await ProductoImagenService.save_producto_image(
+            producto_id=producto_id,
+            file=file,
+            optimize=True
+        )
+
+        # Actualizar el campo imagen_path del producto
+        await producto_service.update_producto(
+            producto_id,
+            ProductoUpdate(imagen_path=imagen_path)
+        )
+
+        return {
+            "message": "Imagen subida exitosamente",
+            "producto_id": producto_id,
+            "imagen_path": imagen_path,
+            "filename": file.filename
+        }
+
+    except ProductoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except HTTPException:
+        raise  # Re-lanzar excepciones HTTP del servicio
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al subir la imagen: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{producto_id}/imagen",
+    status_code=status.HTTP_200_OK,
+    summary="Eliminar imagen de producto",
+    description="Elimina la imagen asociada a un producto.",
+)
+async def delete_producto_imagen(
+    producto_id: str,
+    session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
+):
+    """
+    Elimina la imagen asociada a un producto.
+
+    Args:
+        producto_id: ID del producto (ULID).
+        session: Sesión de base de datos.
+        current_admin: Usuario administrador autenticado.
+
+    Returns:
+        Confirmación de eliminación.
+
+    Raises:
+        HTTPException:
+            - 401: Si no está autenticado como administrador.
+            - 404: Si el producto o la imagen no existen.
+            - 500: Si ocurre un error al eliminar.
+    """
+    if current_admin is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Se requiere autenticación de administrador"
+        )
+
+    try:
+        producto_service = ProductoService(session)
+        await producto_service.get_producto_by_id(producto_id)
+
+        deleted = ProductoImagenService.delete_producto_image(producto_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró ninguna imagen para este producto"
+            )
+
+        await producto_service.update_producto(
+            producto_id,
+            ProductoUpdate(imagen_path=None)
+        )
+
+        return {
+            "message": "Imagen eliminada exitosamente",
+            "producto_id": producto_id
+        }
+
+    except ProductoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar la imagen: {str(e)}"
         )
 
 

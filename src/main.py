@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src.core.database import create_tables, close_database
 from src.core.config import get_settings
@@ -133,6 +134,11 @@ async def lifespan(app: FastAPI):
 
     # Configurar sistema de logging
     configure_logging()
+
+    # Asegurar que existe el directorio para imágenes de productos
+    from src.business_logic.menu.producto_img_service import ProductoImagenService
+    ProductoImagenService.ensure_directory_exists()
+    logger.info(f"Directorio de imágenes verificado: {ProductoImagenService.STATIC_DIR}")
 
     # Crear tablas en la base de datos si no existen
     # import os
@@ -261,6 +267,15 @@ def create_app() -> FastAPI:
 
     # Agregar middleware para manejo de errores
     app.add_middleware(ErrorHandlerMiddleware)
+
+    # Montar directorio estático para imágenes
+    from pathlib import Path
+    static_dir = Path("app/static")
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        logger.info(f"Directorio estático montado: {static_dir}")
+    else:
+        logger.warning(f"Directorio estático no encontrado: {static_dir}")
 
     # Registrar todos los routers disponibles
     register_routers(app)

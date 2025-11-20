@@ -232,8 +232,6 @@ class ProductoCompletoUpdateSchema(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
     
     descripcion: Optional[str] = Field(default=None, description="Descripción del producto")
-    imagen_path: Optional[str] = Field(default=None, description="Ruta imagen", max_length=255)
-    imagen_alt_text: Optional[str] = Field(default=None, description="Texto alt imagen", max_length=255)
     disponible: bool = Field(description="Si el producto está disponible")
     destacado: bool = Field(description="Si el producto está destacado")
     
