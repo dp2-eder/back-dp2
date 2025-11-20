@@ -1,11 +1,8 @@
-"""
-Servicio para la gestión de productos en el sistema.
-"""
-
 from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
+from src.repositories.menu.producto_alergeno_repository import ProductoAlergenoRepository
 from src.repositories.menu.producto_repository import ProductoRepository
 from src.repositories.mesas.mesa_repository import MesaRepository
 from src.repositories.mesas.locales_productos_repository import LocalesProductosRepository
@@ -55,11 +52,12 @@ class ProductoService:
         self.repository = ProductoRepository(session)
         self.mesa_repository = MesaRepository(session)
         self.locales_productos_repository = LocalesProductosRepository(session)
+        self.alergeno_repository = ProductoAlergenoRepository(session)
 
     async def create_producto(self, producto_data: ProductoCreate) -> ProductoResponse:
         """
         Crea un nuevo producto en el sistema.
-        
+
         Parameters
         ----------
         producto_data : ProductoCreate
@@ -91,7 +89,7 @@ class ProductoService:
 
             # Normalizar el nombre antes de retornar
             created_producto.nombre = normalize_product_name(created_producto.nombre)
-            
+
             # Convertir y retornar como esquema de respuesta
             return ProductoResponse.model_validate(created_producto)
         except IntegrityError:
@@ -141,14 +139,14 @@ class ProductoService:
         ProductoConOpcionesResponse
             Esquema de respuesta con el producto y opciones agrupadas por tipo.
         """
-
-
         # Buscar el producto con opciones
         producto = await self.repository.get_by_id_with_opciones(producto_id)
         if not producto:
             raise ProductoNotFoundError(
                 f"No se encontró el producto con el ID proporcionado"
             )
+
+        alergenos = await self.alergeno_repository.get_by_producto(producto_id)
 
         # Agrupar opciones por tipo
         tipos_dict: dict[str, dict] = {}
@@ -206,6 +204,7 @@ class ProductoService:
             id_categoria=str(producto.id_categoria),
             disponible=producto.disponible,
             destacado=producto.destacado,
+            alergenos=alergenos,
             fecha_creacion=producto.fecha_creacion,
             fecha_modificacion=producto.fecha_modificacion,
             tipos_opciones=tipos_opciones_schemas
@@ -214,7 +213,7 @@ class ProductoService:
     async def delete_producto(self, producto_id: str) -> bool:
         """
         Elimina un producto por su ID.
-        
+
         Parameters
         ----------
         producto_id : str
@@ -407,7 +406,7 @@ class ProductoService:
 
             # Normalizar el nombre antes de retornar
             updated_producto.nombre = normalize_product_name(updated_producto.nombre)
-            
+
             # Convertir y retornar como esquema de respuesta
             return ProductoResponse.model_validate(updated_producto)
         except IntegrityError:
@@ -538,9 +537,9 @@ class ProductoService:
             )
 
     async def get_productos_cards_by_categoria(
-        self, 
+        self,
         categoria_id: str | None = None,
-        skip: int = 0, 
+        skip: int = 0,
         limit: int = 100
     ) -> ProductoCardList:
         """
@@ -559,7 +558,7 @@ class ProductoService:
         -------
         ProductoCardList
             Esquema con la lista de productos en formato card y el total.
-        
+
         Raises
         ------
         ProductoValidationError
@@ -602,7 +601,7 @@ class ProductoService:
     ) -> ProductoConOpcionesResponse:
         """
         Actualiza completamente un producto con todos sus datos relacionados.
-        
+
         Actualiza el producto base, sus alérgenos, secciones, tipos de opciones y opciones.
         Reemplaza completamente las relaciones existentes.
 
@@ -664,7 +663,7 @@ class ProductoService:
 
             # Normalizar nombres antes de retornar
             producto_completo.nombre = normalize_product_name(producto_completo.nombre)
-            
+
             # Transformar y estructurar los datos de opciones por tipo
             tipos_opciones_response = []
             if hasattr(producto_completo, 'opciones') and producto_completo.opciones:
@@ -682,11 +681,11 @@ class ProductoService:
                             "orden_tipo": opcion.tipo_opcion.orden,
                             "opciones": []
                         }
-                    
+
                     tipos_dict[tipo_id]["opciones"].append(
                         ProductoOpcionDetalleSchema.model_validate(opcion)
                     )
-                
+
                 # Convertir el diccionario a lista ordenada por orden_tipo
                 tipos_opciones_response = [
                     TipoOpcionConOpcionesSchema.model_validate(tipo_data)
@@ -709,7 +708,7 @@ class ProductoService:
                 "fecha_modificacion": producto_completo.fecha_modificacion,
                 "tipos_opciones": tipos_opciones_response
             }
-            
+
             return ProductoConOpcionesResponse.model_validate(response_data)
 
         except IntegrityError as e:
