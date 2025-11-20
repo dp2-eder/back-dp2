@@ -2,7 +2,7 @@
 Servicio para la gestión de tipos de opciones en el sistema.
 """
 
-from typing import Optional
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -293,4 +293,42 @@ class TipoOpcionService:
                 )
             # Si no es por código, reenviar la excepción original
             raise
+
+    async def create_batch(self, tipos_opciones_data: list[TipoOpcionCreate]) -> list[TipoOpcionResponse]:
+        """
+        Crea múltiples tipos de opciones en el sistema.
+
+        Parameters
+        ----------
+        tipos_opciones_data : list[TipoOpcionCreate]
+            Lista de datos para crear los nuevos tipos de opciones.
+
+        Returns
+        -------
+        list[TipoOpcionResponse]
+            Lista de esquemas de respuesta con los datos de los tipos de opciones creados.
+
+        Raises
+        ------
+        TipoOpcionConflictError
+            Si alguno de los tipos de opciones tiene un código duplicado.
+        """
+        tipoOpcion_models: List[TipoOpcionModel] = []
+        try:
+            for tipo_opcion_data in tipos_opciones_data:
+                tipo_opcion = TipoOpcionModel(
+                    codigo=tipo_opcion_data.codigo,
+                    nombre=tipo_opcion_data.nombre,
+                    descripcion=tipo_opcion_data.descripcion,
+                    activo=tipo_opcion_data.activo,
+                    orden=tipo_opcion_data.orden
+                )
+                tipoOpcion_models.append(tipo_opcion)
+
+            await self.repository.create(tipoOpcion_models)
+            return [TipoOpcionResponse.model_validate(to) for to in tipoOpcion_models]
+        except IntegrityError:
+            raise TipoOpcionConflictError(
+                "Uno o más tipos de opciones tienen códigos duplicados"
+            )
 

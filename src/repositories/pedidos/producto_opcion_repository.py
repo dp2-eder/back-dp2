@@ -201,3 +201,88 @@ class ProductoOpcionRepository:
             # En caso de error, no es necesario hacer rollback aquí
             # porque no estamos modificando datos
             raise
+
+    async def create_batch(self, producto_opciones: List[ProductoOpcionModel]) -> List[ProductoOpcionModel]:
+        """
+        Crea múltiples opciones de productos en la base de datos en una sola operación.
+
+        Parameters
+        ----------
+        producto_opciones : List[ProductoOpcionModel]
+            Lista de instancias del modelo de opción de producto a crear.
+
+        Returns
+        -------
+        List[ProductoOpcionModel]
+            Lista de modelos de opción de producto creados con sus IDs asignados.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            self.session.add_all(producto_opciones)
+            await self.session.flush()
+            await self.session.commit()
+            for opcion in producto_opciones:
+                await self.session.refresh(opcion)
+            return producto_opciones
+        except SQLAlchemyError:
+            await self.session.rollback()
+            raise
+    
+    async def delete_batch(self, producto_opcion_ids: List[str]) -> int:
+        """
+        Elimina múltiples opciones de productos de la base de datos por sus IDs.
+
+        Parameters
+        ----------
+        producto_opcion_ids : List[str]
+            Lista de identificadores únicos de las opciones de productos a eliminar.
+
+        Returns
+        -------
+        int
+            Número de opciones de productos eliminadas.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            stmt = delete(ProductoOpcionModel).where(ProductoOpcionModel.id.in_(producto_opcion_ids))
+            result = await self.session.execute(stmt)
+            await self.session.commit()
+            return result.rowcount
+        except SQLAlchemyError:
+            await self.session.rollback()
+            raise
+
+    async def exists_batch(self, producto_opcion_ids: List[str]) -> List[str]:
+        """
+        Verifica la existencia de múltiples opciones de productos por sus IDs.
+
+        Parameters
+        ----------
+        producto_opcion_ids : List[str]
+            Lista de identificadores únicos de las opciones de productos a verificar.
+
+        Returns
+        -------
+        List[str]
+            Lista de IDs que existen en la base de datos.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            query = select(ProductoOpcionModel.id).where(ProductoOpcionModel.id.in_(producto_opcion_ids))
+            result = await self.session.execute(query)
+            existing_ids = result.scalars().all()
+            return list(existing_ids)
+        except SQLAlchemyError:
+            raise

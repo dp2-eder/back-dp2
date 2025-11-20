@@ -232,3 +232,32 @@ class TipoOpcionRepository:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
+    async def create_batch(self, tipos_opciones: List[TipoOpcionModel]) -> List[TipoOpcionModel]:
+        """
+        Crea múltiples tipos de opciones en la base de datos en una sola operación.
+
+        Parameters
+        ----------
+        tipos_opciones : List[TipoOpcionModel]
+            Lista de instancias del modelo de tipo de opción a crear.
+
+        Returns
+        -------
+        List[TipoOpcionModel]
+            Lista de modelos de tipo de opción creados con sus IDs asignados.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            self.session.add_all(tipos_opciones)
+            await self.session.flush()
+            await self.session.commit()
+            for tipo_opcion in tipos_opciones:
+                await self.session.refresh(tipo_opcion)
+            return tipos_opciones
+        except SQLAlchemyError:
+            await self.session.rollback()
+            raise
