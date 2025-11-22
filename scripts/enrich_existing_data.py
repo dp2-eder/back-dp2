@@ -5,6 +5,7 @@ Script para enriquecer datos existentes de productos con:
 - Relaciones producto-alrgeno (asociar inteligentemente)
 - Opciones de productos (crear y asociar)
 
+
  NO crea productos ni categoras nuevas.
 Solo agrega informacin complementaria a los 274 productos existentes.
 

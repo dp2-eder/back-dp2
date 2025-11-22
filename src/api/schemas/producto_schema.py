@@ -202,6 +202,7 @@ class ProductoCardList(BaseModel):
 
 # Import real después de definir las clases para evitar circular import
 from src.api.schemas.producto_opcion_schema import ProductoOpcionResponse  # noqa: E402
+from src.api.schemas.producto_alergeno_schema import ProductoAlergenoUpdateInput  # noqa: E402
 
 # Actualizar forward references
 ProductoConOpcionesResponse.model_rebuild()
@@ -209,14 +210,14 @@ ProductoConOpcionesResponse.model_rebuild()
 
 class ProductoOpcionCompletoSchema(BaseModel):
     """Schema para opciones de producto en actualización masiva."""
-    
+
     model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
-    
-    id_opcion: str = Field(description="ID de la opción")
+
+    id_opcion: Optional[str] = Field(default=None, description="ID de la opción (null si es nueva)")
     nombre: str = Field(description="Nombre de la opción", min_length=1, max_length=255)
     precio_adicional: Decimal = Field(description="Precio adicional", ge=0)
-    activo: bool = Field(description="Si la opción está activa")
-    orden: int = Field(description="Orden de visualización", ge=0)
+    activo: bool = Field(default=True, description="Si la opción está activa")
+    orden: int = Field(default=0, description="Orden de visualización", ge=0)
 
 class SeccionProductoSchema(BaseModel):
     """Schema para secciones de producto en actualización masiva."""
@@ -228,7 +229,7 @@ class SeccionProductoSchema(BaseModel):
 
 class ProductoCompletoUpdateSchema(BaseModel):
     """Schema para actualización masiva de producto con todos sus datos."""
-    
+
     model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
     
     descripcion: Optional[str] = Field(default=None, description="Descripción del producto")

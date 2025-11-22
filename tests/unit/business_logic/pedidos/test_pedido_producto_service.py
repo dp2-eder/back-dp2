@@ -26,10 +26,19 @@ from sqlalchemy.exc import IntegrityError
 
 
 @pytest.fixture
-def mock_repository():
-    """Fixture que proporciona un mock del repositorio de pedido_producto."""
-    repository = AsyncMock()
-    return repository
+def mock_repository(sample_item_data):
+    """
+    Mock del repositorio de pedido_producto con métodos async correctamente mockeados.
+    """
+    items = [
+        PedidoProductoModel(**sample_item_data),
+        PedidoProductoModel(**{**sample_item_data, "id": str(ULID()), "cantidad": 3}),
+    ]
+
+    repo = AsyncMock()
+    repo.get_by_pedido_id = AsyncMock(return_value=items)
+    return repo
+
 
 
 @pytest.fixture
@@ -47,12 +56,26 @@ def mock_producto_repository():
 
 
 @pytest.fixture
-def pedido_producto_service(mock_repository, mock_pedido_repository, mock_producto_repository):
+def mock_pedido_opcion_repository():
+    """Fixture que proporciona un mock del repositorio de pedido_opcion."""
+    repository = AsyncMock()
+    repository.get_by_pedido_producto_id = AsyncMock(return_value=[])
+    return repository
+
+
+@pytest.fixture
+def pedido_producto_service(
+    mock_repository,
+    mock_pedido_repository,
+    mock_producto_repository,
+    mock_pedido_opcion_repository,
+):
     """Fixture que proporciona una instancia del servicio con repositorios mockeados."""
     service = PedidoProductoService(AsyncMock())
     service.repository = mock_repository
     service.pedido_repository = mock_pedido_repository
     service.producto_repository = mock_producto_repository
+    service.pedido_opcion_repository = mock_pedido_opcion_repository
     return service
 
 
@@ -278,7 +301,8 @@ async def test_get_productos_by_pedido_success(
         ),
     ]
     mock_pedido_repository.get_by_id.return_value = PedidoModel(**sample_pedido_data)
-    mock_repository.get_by_pedido_id.return_value = items
+    mock_repository.get_by_pedido_id = AsyncMock(return_value=items)
+
 
     # Act
     result = await pedido_producto_service.get_productos_by_pedido(pedido_id)

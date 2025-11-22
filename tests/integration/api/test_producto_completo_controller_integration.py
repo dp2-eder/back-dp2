@@ -89,7 +89,18 @@ async def test_update_producto_completo_integration(async_client, db_session):
         "id_categoria": categoria.id,
         "disponible": True,
         "destacado": True,
-        "alergenos": [alergeno1.id, alergeno2.id],
+        "alergenos": [
+            {
+                "id_alergeno": alergeno1.id,
+                "nivel_presencia": "contiene",
+                "notas": "Alérgeno de prueba 1"
+            },
+            {
+                "id_alergeno": alergeno2.id,
+                "nivel_presencia": "contiene",
+                "notas": "Alérgeno de prueba 2"
+            }
+        ],
         "secciones": [],
         "tipos_opciones": []
     }

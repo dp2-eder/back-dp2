@@ -57,20 +57,36 @@ def mock_producto_opcion_repository():
 
 
 @pytest.fixture
-def mock_pedido_opcion_repository():
-    """Fixture que proporciona un mock del repositorio de opciones de pedidos."""
+def mock_pedido_producto_repository():
+    """Fixture que proporciona un mock del repositorio de items de pedidos."""
     repository = AsyncMock()
+    repository.get_by_pedido_id = AsyncMock(return_value=[])
     return repository
 
 
 @pytest.fixture
-def pedido_service(mock_repository, mock_mesa_repository):
+def mock_pedido_opcion_repository():
+    """Fixture que proporciona un mock del repositorio de opciones de pedidos."""
+    repository = AsyncMock()
+    repository.get_by_pedido_producto_id = AsyncMock(return_value=[])
+    return repository
+
+
+@pytest.fixture
+def pedido_service(
+    mock_repository,
+    mock_mesa_repository,
+    mock_pedido_producto_repository,
+    mock_pedido_opcion_repository,
+):
     """
     Fixture que proporciona una instancia del servicio de pedidos con repositorios mockeados.
     """
     service = PedidoService(AsyncMock())
     service.repository = mock_repository
     service.mesa_repository = mock_mesa_repository
+    service.pedido_producto_repository = mock_pedido_producto_repository
+    service.pedido_opcion_repository = mock_pedido_opcion_repository
     return service
 
 
@@ -91,6 +107,25 @@ def sample_pedido_data():
         "total": Decimal("105.00"),
         "notas_cliente": "Sin cebolla",
         "notas_cocina": "Urgente",
+        "fecha_creacion": datetime.now(),
+        "fecha_modificacion": datetime.now(),
+    }
+
+
+@pytest.fixture
+def sample_pedido_item_data(sample_pedido_data):
+    """
+    Fixture que proporciona datos de muestra para un item asociado a un pedido.
+    """
+    return {
+        "id": str(ULID()),
+        "id_pedido": sample_pedido_data["id"],
+        "id_producto": str(ULID()),
+        "cantidad": 2,
+        "precio_unitario": Decimal("10.00"),
+        "precio_opciones": Decimal("1.50"),
+        "subtotal": Decimal("23.00"),
+        "notas_personalizacion": "Extra picante",
         "fecha_creacion": datetime.now(),
         "fecha_modificacion": datetime.now(),
     }
@@ -196,7 +231,10 @@ async def test_create_pedido_mesa_not_found(
 
 @pytest.mark.asyncio
 async def test_get_pedido_by_id_success(
-    pedido_service, mock_repository, sample_pedido_data
+    pedido_service,
+    mock_repository,
+    sample_pedido_data,
+    sample_pedido_item_data,
 ):
     """
     Prueba la obtención exitosa de un pedido por su ID.
@@ -216,6 +254,9 @@ async def test_get_pedido_by_id_success(
     # Arrange
     pedido_id = sample_pedido_data["id"]
     mock_repository.get_by_id.return_value = PedidoModel(**sample_pedido_data)
+    pedido_service.pedido_producto_repository.get_by_pedido_id.return_value = [
+        PedidoProductoModel(**sample_pedido_item_data)
+    ]
 
     # Act
     result = await pedido_service.get_pedido_by_id(pedido_id)
@@ -223,6 +264,8 @@ async def test_get_pedido_by_id_success(
     # Assert
     assert result.id == pedido_id
     assert result.numero_pedido == sample_pedido_data["numero_pedido"]
+    assert len(result.items) == 1
+    assert result.items[0].id_producto == sample_pedido_item_data["id_producto"]
     mock_repository.get_by_id.assert_called_once_with(pedido_id)
 
 
@@ -255,7 +298,10 @@ async def test_get_pedido_by_id_not_found(pedido_service, mock_repository):
 
 @pytest.mark.asyncio
 async def test_get_pedido_by_numero_success(
-    pedido_service, mock_repository, sample_pedido_data
+    pedido_service,
+    mock_repository,
+    sample_pedido_data,
+    sample_pedido_item_data,
 ):
     """
     Prueba la obtención exitosa de un pedido por su número.
@@ -274,12 +320,16 @@ async def test_get_pedido_by_numero_success(
     # Arrange
     numero_pedido = sample_pedido_data["numero_pedido"]
     mock_repository.get_by_numero_pedido.return_value = PedidoModel(**sample_pedido_data)
+    pedido_service.pedido_producto_repository.get_by_pedido_id.return_value = [
+        PedidoProductoModel(**sample_pedido_item_data)
+    ]
 
     # Act
     result = await pedido_service.get_pedido_by_numero(numero_pedido)
 
     # Assert
     assert result.numero_pedido == numero_pedido
+    assert len(result.items) == 1
     mock_repository.get_by_numero_pedido.assert_called_once_with(numero_pedido)
 
 
