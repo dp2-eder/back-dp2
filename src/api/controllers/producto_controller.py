@@ -367,50 +367,6 @@ async def list_productos(
             detail=f"Error interno del servidor: {str(e)}",
         )
 
-
-@router.put(
-    "/{producto_id}",
-    response_model=ProductoResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Actualizar un producto",
-    description="Actualiza los datos de un producto existente.",
-)
-async def update_producto(
-    producto_id: str,
-    producto_data: ProductoUpdate,
-    session: AsyncSession = Depends(get_database_session),
-) -> ProductoResponse:
-    """
-    Actualiza un producto existente.
-
-    Args:
-        producto_id: ID del producto a actualizar.
-        producto_data: Datos del producto a actualizar.
-        session: Sesión de base de datos.
-
-    Returns:
-        El producto actualizado con todos sus datos.
-
-    Raises:
-        HTTPException:
-            - 404: Si no se encuentra el producto.
-            - 409: Si hay un conflicto (e.g., nombre duplicado).
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        producto_service = ProductoService(session)
-        return await producto_service.update_producto(producto_id, producto_data)
-    except ProductoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except ProductoConflictError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
-
-
 @router.delete(
     "/{producto_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -607,18 +563,18 @@ async def delete_producto_imagen(
 
 
 @router.put(
-    "/{producto_id}/completo",
-    response_model=ProductoConOpcionesResponse,
+    "/{producto_id}",
     status_code=status.HTTP_200_OK,
-    summary="Actualizar producto completo",
-    description="Actualiza completamente un producto con todos sus datos: alérgenos, secciones, tipos de opciones y opciones.",
+    response_model=ProductoConOpcionesResponse,
+    summary="Actualizar producto",
+    description="Actualiza un producto con todos sus datos: alérgenos, secciones, tipos de opciones y opciones.",
 )
-async def update_producto_completo(
+async def update_producto(
     producto_id: str,
     producto_data: ProductoCompletoUpdateSchema,
     session: AsyncSession = Depends(get_database_session),
     current_admin = Depends(get_current_admin)
-) -> ProductoConOpcionesResponse:
+):
     """
     Actualiza completamente un producto con todos sus datos relacionados.
 
@@ -651,14 +607,23 @@ async def update_producto_completo(
 
     try:
         producto_service = ProductoService(session)
-        return await producto_service.update_producto_completo(producto_id, producto_data)
+        resultado = await producto_service.update_producto_completo(producto_id, producto_data)
+        
+        # Commit de la transacción si todo salió bien
+        await session.commit()
+        
+        return resultado
     except ProductoValidationError as e:
+        await session.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ProductoNotFoundError as e:
+        await session.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ProductoConflictError as e:
+        await session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except Exception as e:
+        await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",

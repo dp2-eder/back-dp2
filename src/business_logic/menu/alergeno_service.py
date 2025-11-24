@@ -220,3 +220,27 @@ class AlergenoService:
                 )
             # Si no es por nombre, reenviar la excepción original
             raise
+
+
+    async def get_alergenos_by_producto(self, producto_id: str) -> AlergenoList:
+        """
+        Obtiene la lista de alérgenos asociados a un producto específico.
+
+        Parameters
+        ----------
+        producto_id : str
+            Identificador único del producto (ULID).
+
+        Returns
+        -------
+        AlergenoList
+            Esquema con la lista de alérgenos asociados al producto.
+        """
+        # Obtener alérgenos asociados al producto desde el repositorio
+        alergenos = await self.repository.get_alergenos_by_producto_id(producto_id)
+
+        # Convertir modelos a esquemas de resumen
+        alergeno_summaries = [AlergenoSummary.model_validate(alergeno) for alergeno in alergenos]
+
+        # Retornar esquema de lista
+        return AlergenoList(items=alergeno_summaries, total=len(alergeno_summaries))
