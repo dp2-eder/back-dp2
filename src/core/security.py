@@ -5,6 +5,7 @@ Security configuration for authentication and authorization.
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import bcrypt
 from jose import JWTError, jwt
 
 from src.core.config import get_settings
@@ -26,23 +27,10 @@ class SecurityConfig:
         Returns:
             True if password matches, False otherwise
         """
-        # bcrypt requiere bytes, convertimos si vienen como str
-        if isinstance(plain_password, str):
-            plain_bytes = plain_password.encode('utf-8')
-        else:
-            plain_bytes = plain_password
-
-        if isinstance(hashed_password, str):
-            hash_bytes = hashed_password.encode('utf-8')
-        else:
-            hash_bytes = hashed_password
-
-        try:
-            # checkpw extrae la sal del hash_bytes automáticamente y verifica
-            return bcrypt.checkpw(plain_bytes, hash_bytes)
-        except ValueError:
-            # En caso de formato de hash inválido
-            return False
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'),
+            hashed_password.encode('utf-8')
+        )
 
     def get_password_hash(self, password: str) -> str:
         """
@@ -54,16 +42,8 @@ class SecurityConfig:
         Returns:
             Hashed password as string (ready for DB storage)
         """
-        if isinstance(password, str):
-            pwd_bytes = password.encode('utf-8')
-        else:
-            pwd_bytes = password
-
-        # Generar sal y hashear
         salt = bcrypt.gensalt()
-        hashed = bcrypt.hashpw(pwd_bytes, salt)
-
-        # Retornar como string para almacenar en la BD (VARCHAR)
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
         return hashed.decode('utf-8')
 
     def create_access_token(
