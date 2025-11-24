@@ -110,6 +110,8 @@ async def test_enviar_pedido_por_token_success_integration(async_client, db_sess
         id=str(ULID()),
         nombre="Hamburguesa Test",
         precio_base=Decimal("50.00"),
+        imagen_path="/images/hamburguesa.jpg",
+        imagen_alt_text="Hamburguesa Test",
         id_categoria=categoria.id,
         disponible=True
     )
@@ -149,6 +151,9 @@ async def test_enviar_pedido_por_token_success_integration(async_client, db_sess
     assert len(pedido["productos"]) == 1
     assert pedido["productos"][0]["cantidad"] == 2
     assert pedido["productos"][0]["precio_unitario"] == "50.00"
+    assert pedido["productos"][0]["precio_base"] == "50.00"
+    assert pedido["productos"][0]["imagen_path"] == "/images/hamburguesa.jpg"
+    assert pedido["productos"][0]["imagen_alt_text"] == "Hamburguesa Test"
 
     # Verify in database
     repo = PedidoRepository(db_session)

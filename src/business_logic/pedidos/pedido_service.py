@@ -942,6 +942,9 @@ class PedidoService:
                         id=created_item.id,
                         id_producto=producto.id,
                         nombre_producto=producto.nombre,
+                        precio_base=producto.precio_base,
+                        imagen_path=producto.imagen_path,
+                        imagen_alt_text=producto.imagen_alt_text,
                         cantidad=item.cantidad,
                         precio_unitario=producto.precio_base,
                         precio_opciones=precio_opciones,
@@ -1047,6 +1050,17 @@ class PedidoService:
             # Procesar productos del pedido con sus opciones
             productos_detalle = []
             for pedido_producto in pedido.pedidos_productos:
+                producto_rel = pedido_producto.producto
+                nombre_producto = producto_rel.nombre if producto_rel else "Producto"
+                precio_base = (
+                    producto_rel.precio_base
+                    if producto_rel and producto_rel.precio_base is not None
+                    else pedido_producto.precio_unitario
+                )
+                imagen_path = producto_rel.imagen_path if producto_rel else None
+                imagen_alt_text = (
+                    producto_rel.imagen_alt_text if producto_rel else None
+                )
                 # Procesar opciones del producto
                 opciones_detalle = []
                 for pedido_opcion in pedido_producto.pedidos_opciones:
@@ -1068,11 +1082,10 @@ class PedidoService:
                     ProductoPedidoDetalle(
                         id=pedido_producto.id,
                         id_producto=pedido_producto.id_producto,
-                        nombre_producto=(
-                            pedido_producto.producto.nombre
-                            if pedido_producto.producto
-                            else "Producto"
-                        ),
+                        nombre_producto=nombre_producto,
+                        precio_base=precio_base,
+                        imagen_path=imagen_path,
+                        imagen_alt_text=imagen_alt_text,
                         cantidad=pedido_producto.cantidad,
                         precio_unitario=pedido_producto.precio_unitario,
                         precio_opciones=pedido_producto.precio_opciones,
