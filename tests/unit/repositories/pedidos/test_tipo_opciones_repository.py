@@ -115,7 +115,6 @@ async def test_create_tipo_opcion():
     assert result == tipo_opcion
     mock_session.add.assert_called_once_with(tipo_opcion)
     mock_session.flush.assert_called_once()
-    mock_session.commit.assert_called_once()
     mock_session.refresh.assert_called_once_with(tipo_opcion)
 
     # Arrange - Caso de error
@@ -126,7 +125,6 @@ async def test_create_tipo_opcion():
     with pytest.raises(SQLAlchemyError):
         await repository.create(tipo_opcion)
 
-    mock_session.rollback.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -56,11 +56,10 @@ class TipoOpcionRepository:
         try:
             self.session.add(tipo_opcion)
             await self.session.flush()
-            await self.session.commit()
+            # Commit será manejado por el servicio
             await self.session.refresh(tipo_opcion)
             return tipo_opcion
         except SQLAlchemyError:
-            await self.session.rollback()
             raise
 
     async def get_by_id(self, tipo_opcion_id: str) -> Optional[TipoOpcionModel]:
@@ -148,7 +147,7 @@ class TipoOpcionRepository:
             )
 
             result = await self.session.execute(stmt)
-            await self.session.commit()
+            # Commit será manejado por el servicio
 
             # Consultar el tipo de opción actualizado
             updated_tipo_opcion = await self.get_by_id(tipo_opcion_id)
@@ -159,7 +158,6 @@ class TipoOpcionRepository:
 
             return updated_tipo_opcion
         except SQLAlchemyError:
-            await self.session.rollback()
             raise
 
     async def get_all(

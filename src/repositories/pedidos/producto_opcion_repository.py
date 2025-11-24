@@ -224,12 +224,11 @@ class ProductoOpcionRepository:
         try:
             self.session.add_all(producto_opciones)
             await self.session.flush()
-            await self.session.commit()
+            # Commit será manejado por el servicio
             for opcion in producto_opciones:
                 await self.session.refresh(opcion)
             return producto_opciones
         except SQLAlchemyError:
-            await self.session.rollback()
             raise
     
     async def delete_batch(self, producto_opcion_ids: List[str]) -> int:
@@ -284,5 +283,34 @@ class ProductoOpcionRepository:
             result = await self.session.execute(query)
             existing_ids = result.scalars().all()
             return list(existing_ids)
+        except SQLAlchemyError:
+            raise
+
+    async def delete_by_producto(self, id_producto: str) -> int:
+        """
+        Elimina todas las opciones de un producto.
+
+        Parameters
+        ----------
+        id_producto : str
+            Identificador único del producto.
+
+        Returns
+        -------
+        int
+            Número de opciones eliminadas.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            stmt = delete(ProductoOpcionModel).where(
+                ProductoOpcionModel.id_producto == id_producto
+            )
+            result = await self.session.execute(stmt)
+            # No hacer commit aquí, será manejado por el servicio
+            return result.rowcount
         except SQLAlchemyError:
             raise

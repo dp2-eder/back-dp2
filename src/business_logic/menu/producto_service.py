@@ -736,7 +736,66 @@ class ProductoService:
                 await producto_alergeno_repo.batch_create(nuevas_relaciones)
 
             # 4. Procesar secciones (tipos de opciones y opciones)
-            # TODO: Implementar lógica de actualización de secciones cuando esté lista
+            if producto_data.secciones:
+                from src.repositories.pedidos.producto_opcion_repository import ProductoOpcionRepository
+                from src.repositories.pedidos.tipo_opciones_repository import TipoOpcionRepository
+                from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
+                from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
+                
+                producto_opcion_repo = ProductoOpcionRepository(self.repository.session)
+                tipo_opciones_repo = TipoOpcionRepository(self.repository.session)
+                
+                # Eliminar todas las opciones existentes del producto
+                await producto_opcion_repo.delete_by_producto(producto_id)
+                
+                # Procesar cada sección (tipo de opción con sus opciones)
+                for seccion in producto_data.secciones:
+                    tipo_opcion_data = seccion.tipo_opcion
+                    
+                    # Buscar si ya existe el tipo de opción por código
+                    tipo_existente = await tipo_opciones_repo.get_by_codigo(tipo_opcion_data.codigo)
+                    
+                    if tipo_existente:
+                        # Actualizar tipo existente
+                        tipo_opcion_id = tipo_existente.id
+                        await tipo_opciones_repo.update(
+                            tipo_opcion_id,
+                            nombre=tipo_opcion_data.nombre,
+                            descripcion=tipo_opcion_data.descripcion,
+                            seleccion_minima=tipo_opcion_data.seleccion_minima,
+                            seleccion_maxima=tipo_opcion_data.seleccion_maxima,
+                            orden=tipo_opcion_data.orden,
+                            activo=tipo_opcion_data.activo
+                        )
+                    else:
+                        # Crear nuevo tipo de opción
+                        nuevo_tipo = TipoOpcionModel(
+                            codigo=tipo_opcion_data.codigo,
+                            nombre=tipo_opcion_data.nombre,
+                            descripcion=tipo_opcion_data.descripcion,
+                            seleccion_minima=tipo_opcion_data.seleccion_minima,
+                            seleccion_maxima=tipo_opcion_data.seleccion_maxima,
+                            orden=tipo_opcion_data.orden,
+                            activo=tipo_opcion_data.activo
+                        )
+                        nuevo_tipo = await tipo_opciones_repo.create(nuevo_tipo)
+                        tipo_opcion_id = nuevo_tipo.id
+                    
+                    # Crear las opciones para este producto y tipo
+                    nuevas_opciones = [
+                        ProductoOpcionModel(
+                            id_producto=producto_id,
+                            id_tipo_opcion=tipo_opcion_id,
+                            nombre=opcion.nombre,
+                            precio_adicional=opcion.precio_adicional,
+                            activo=opcion.activo,
+                            orden=opcion.orden
+                        )
+                        for opcion in seccion.opciones
+                    ]
+                    
+                    if nuevas_opciones:
+                        await producto_opcion_repo.create_batch(nuevas_opciones)
             
             # 5. Flush para detectar errores antes del commit
             await self.session.flush()
