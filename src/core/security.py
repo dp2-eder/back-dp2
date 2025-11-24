@@ -3,14 +3,11 @@ Security configuration for authentication and authorization.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Union
+from typing import Optional
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from src.core.config import get_settings
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class SecurityConfig:
@@ -30,7 +27,10 @@ class SecurityConfig:
         Returns:
             True if password matches, False otherwise
         """
-        return pwd_context.verify(plain_password, hashed_password)
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'),
+            hashed_password.encode('utf-8')
+        )
 
     def get_password_hash(self, password: str) -> str:
         """
@@ -42,7 +42,9 @@ class SecurityConfig:
         Returns:
             Hashed password
         """
-        return pwd_context.hash(password)
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
 
     def create_access_token(
         self,
