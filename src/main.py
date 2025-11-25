@@ -53,6 +53,7 @@ from src.models.pagos.division_cuenta_model import DivisionCuentaModel  # noqa: 
 from src.models.pagos.division_cuenta_detalle_model import DivisionCuentaDetalleModel  # noqa: F401
 # ===========================================================================
 
+from src.models.auth.admin_model import AdminModel
 
 # Configurar logger para este módulo
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ logger = logging.getLogger(__name__)
 async def auto_seed_database():
     """
     Ejecuta el seed de la base de datos automáticamente si está vacía.
-    
+
     Verifica si existen categorías en la base de datos. Si no hay ninguna,
     ejecuta el script de seed para poblar la BD con datos iniciales.
     """
@@ -70,9 +71,9 @@ async def auto_seed_database():
         from sqlalchemy import select, func
         from src.core.database import DatabaseManager
         from src.models.menu.categoria_model import CategoriaModel
-        
+
         logger.info("🔍 Verificando estado de la base de datos...")
-        
+
         # Obtener sesión de base de datos
         db_manager = DatabaseManager()
         async with db_manager.session() as session:
@@ -80,27 +81,27 @@ async def auto_seed_database():
             query = select(func.count(CategoriaModel.id))
             result = await session.execute(query)
             count = result.scalar()
-            
+
             logger.info(f"Categorías encontradas: {count}")
             logger.info(f"DATABASE_URL: {os.getenv('DATABASE_URL', 'No configurada')}")
-            
+
             if count == 0:
                 logger.info("🌱 Base de datos vacía detectada. Ejecutando seed automático...")
-                
+
                 # Importar y ejecutar el seeder
                 from scripts.seed_cevicheria_data import CevicheriaSeeder
-                
+
                 # Crear instancia del seeder CON la sesión
                 seeder = CevicheriaSeeder(session)
                 await seeder.seed_all()
-                
+
                 # Commit de los cambios
                 await session.commit()
-                
+
                 logger.info("✅ Seed completado exitosamente!")
             else:
                 logger.info(f"✅ Base de datos ya contiene datos ({count} categorías). Skip seed.")
-            
+
     except Exception as e:
         import traceback
         logger.error(f"❌ Error al ejecutar auto-seed: {e}")
@@ -133,6 +134,11 @@ async def lifespan(app: FastAPI):
 
     # Configurar sistema de logging
     configure_logging()
+
+    # Asegurar que existe el directorio para imágenes de productos
+    from src.business_logic.menu.producto_img_service import ProductoImagenService
+    ProductoImagenService.ensure_directory_exists()
+    logger.info(f"Directorio de imágenes verificado: {ProductoImagenService.STATIC_DIR}")
 
     # Crear tablas en la base de datos si no existen
     # import os
@@ -203,6 +209,7 @@ def register_routers(app: FastAPI) -> None:
         ("src.api.controllers.locales_productos_controller", "Local - Productos"),
         ("src.api.controllers.locales_tipos_opciones_controller", "Local - Tipos de Opciones"),
         ("src.api.controllers.locales_productos_opciones_controller", "Local - Opciones de Productos"),
+        ("src.api.controllers.admin_controller", "Administrator")
     ]
 
     # Prefijo API común para todas las rutas
@@ -267,6 +274,15 @@ def create_app() -> FastAPI:
 
     # Agregar middleware para manejo de errores
     app.add_middleware(ErrorHandlerMiddleware)
+
+    # Montar directorio estático para imágenes
+    from pathlib import Path
+    static_dir = Path("app/static")
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        logger.info(f"Directorio estático montado: {static_dir}")
+    else:
+        logger.warning(f"Directorio estático no encontrado: {static_dir}")
 
     # Registrar todos los routers disponibles
     register_routers(app)
@@ -334,4 +350,3 @@ if __name__ == "__main__":
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )
-

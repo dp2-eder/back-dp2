@@ -122,3 +122,16 @@ class AlergenoList(BaseModel):
     """Schema para respuestas paginadas que contienen una lista de alérgenos."""
     items: List[AlergenoSummary] = Field(description="Lista de alérgenos en la página actual.")
     total: int = Field(description="Número total de alérgenos que coinciden con la consulta.")
+
+
+class ProductoAlergeno(BaseModel):
+    """Schema detallado para la relación producto-alérgeno con metadatos."""
+    
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+    
+    id: str = Field(description="ID del alérgeno")
+    nombre: str = Field(description="Nombre del alérgeno")
+    icono: Optional[str] = Field(default=None, description="Icono del alérgeno")
+    nivel_riesgo: NivelRiesgo = Field(description="Nivel de riesgo")
+    nivel_presencia: str = Field(description="Nivel de presencia en el producto (contiene, trazas, puede_contener)")
+    notas: Optional[str] = Field(default=None, description="Notas adicionales sobre el alérgeno en este producto")

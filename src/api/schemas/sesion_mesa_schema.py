@@ -46,6 +46,7 @@ class SesionMesaResponse(BaseModel):
 
     id: str = Field(description="Sesion Mesa ID (ULID)")
     id_mesa: str = Field(description="ID de la mesa donde se realiza la sesión")
+    numero_mesa: Optional[str] = Field(default=None, description="Nombre/Número de la mesa")
     id_usuario_creador: str = Field(description="ID del usuario que creó la sesión")
     token_sesion: str = Field(description="Token único de la sesión")
     estado: EstadoSesionMesa = Field(description="Estado actual de la sesión")

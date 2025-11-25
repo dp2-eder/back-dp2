@@ -64,7 +64,7 @@ Cada fase incluye su propio ciclo de desarrollo y pruebas antes de pasar a la si
 - **Pruebas unitarias**:
   - Mocks de la sesión de base de datos.
   - Verificación de que se construyen y ejecutan las consultas correctamente.
-  
+
 - **Pruebas de integración**:
   - Configurar una base de datos en memoria o contenedor de prueba.
   - Verificar interacción real con la base de datos.
@@ -86,7 +86,7 @@ Cada fase incluye su propio ciclo de desarrollo y pruebas antes de pasar a la si
   - Mocks de los repositorios dependientes.
   - Verificación de la lógica de negocio en diferentes escenarios.
   - Casos de éxito y casos de error.
-  
+
 - **Pruebas de integración**:
   - Verificar interacción entre servicio y repositorio real.
 
@@ -108,7 +108,7 @@ Cada fase incluye su propio ciclo de desarrollo y pruebas antes de pasar a la si
   - Mocks de los servicios dependientes.
   - Verificación de códigos HTTP correctos.
   - Validación de respuestas según esquemas definidos.
-  
+
 - **Pruebas de integración**:
   - Verificar flujo completo desde el controlador hasta la base de datos.
 
@@ -135,10 +135,10 @@ Seguir la estructura definida en `docstring.md`, asegurándose de documentar:
 
   PRECONDICIONES:
       - Requisitos previos.
-      
+
   PROCESO:
       - Pasos de la prueba.
-      
+
   POSTCONDICIONES:
       - Resultados esperados.
   """
@@ -185,7 +185,7 @@ Seguir la estructura definida en `docstring.md`, asegurándose de documentar:
 
 - Utilizar type hints en todo el código nuevo.
 - Configurar su editor de codigo para eso.
-  
+
 ### 3.6 Consultas y Recursos
 
 1. **Orden de consulta**:
@@ -225,25 +225,25 @@ Seguir la estructura definida en `docstring.md`, asegurándose de documentar:
 1. **Planificación**:
    - Revisar mockups de UI/UX para la gestión de productos
    - Definir endpoints necesarios: CRUD de productos
-   
+
 2. **Modelo (PR #1)**:
    ```python
    # src/models/menu/producto_model.py
    class ProductoModel(BaseModel):
        """Modelo que representa un producto del menú."""
        # Implementación
-   
+
    # tests/unit/models/menu/test_producto_model.py
    def test_producto_model_creation():
        """
        Verifica que un objeto ProductoModel se crea correctamente.
-       
+
        PRECONDICIONES:
            - Ninguna especial.
-           
+
        PROCESO:
            - Crear instancia con valores específicos.
-           
+
        POSTCONDICIONES:
            - Los atributos deben tener los valores correctos.
        """
@@ -256,10 +256,10 @@ Seguir la estructura definida en `docstring.md`, asegurándose de documentar:
    class ProductoRepository:
        """Repositorio para operaciones CRUD de productos."""
        # Implementación
-   
+
    # tests/unit/repositories/menu/test_producto_repository.py y tests de integración
    # Implementación de tests unitarios con mocks
-   
+
    # tests/integration/repositories/menu/test_producto_repository_integration.py
    # Implementación de tests de integración con BD real
    ```
@@ -270,7 +270,7 @@ Seguir la estructura definida en `docstring.md`, asegurándose de documentar:
    class ProductoService:
        """Servicio para la gestión de productos."""
        # Implementación
-   
+
    # tests unitarios y de integración correspondientes
    ```
 
@@ -281,11 +281,10 @@ Seguir la estructura definida en `docstring.md`, asegurándose de documentar:
    async def get_productos(...):
        """
        Obtiene la lista de productos.
-       
+
        [Documentación completa]
        """
        # Implementación
-   
+
    # tests unitarios y de integración correspondientes
    ```
-

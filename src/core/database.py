@@ -235,6 +235,8 @@ async def create_tables():
     from src.models.pagos.division_cuenta_model import DivisionCuentaModel  # noqa: F401
     from src.models.pagos.division_cuenta_detalle_model import DivisionCuentaDetalleModel  # noqa: F401
 
+    from src.models.auth.admin_model import AdminModel
+
     async with db.engine.begin() as conn:
         await conn.run_sync(BaseModel.metadata.create_all)
 

@@ -60,6 +60,27 @@ def mock_db_session_dependency(async_mock_db_session, cleanup_app):
 
 
 @pytest.fixture
+def mock_admin_auth(cleanup_app):
+    """Fixture que mockea la autenticación de admin para tests unitarios."""
+    from src.core.auth_dependencies import get_current_admin
+    from src.models.auth.admin_model import AdminModel
+    from ulid import ULID
+    
+    mock_admin = AdminModel(
+        id=str(ULID()),
+        usuario="admin_test",
+        email="admin@test.com",
+        password="hashed_password"
+    )
+    
+    async def override_get_current_admin():
+        return mock_admin
+    
+    app.dependency_overrides[get_current_admin] = override_get_current_admin
+    return mock_admin
+
+
+@pytest.fixture
 def mock_producto_service():
     """
     Fixture que proporciona un mock del servicio de productos.
@@ -403,118 +424,6 @@ def test_list_productos_with_categoria_filter(
     mock_producto_service.get_productos.assert_awaited_once_with(0, 10, id_categoria, None, None)
 
 
-def test_update_producto_success(
-    test_client,
-    mock_db_session_dependency,
-    mock_producto_service,
-    sample_producto_id,
-    sample_producto_data,
-):
-    """
-    Prueba la actualización exitosa de un producto.
-
-    PRECONDICIONES:
-        - El cliente de prueba (test_client) debe estar configurado
-        - El servicio de productos debe estar mockeado (mock_producto_service)
-        - Se debe tener un ID de producto válido (sample_producto_id)
-        - Los datos de muestra deben estar disponibles (sample_producto_data)
-
-    PROCESO:
-        - Configura el mock para simular una actualización exitosa.
-        - Realiza una solicitud PUT al endpoint.
-        - Verifica la respuesta HTTP y los datos retornados.
-        
-    POSTCONDICIONES:
-        - La respuesta debe tener código HTTP 200 (OK)
-        - Los datos devueltos deben reflejar los cambios realizados
-        - El método update_producto del servicio debe haber sido llamado una vez
-    """
-    # Arrange
-    update_data = {"nombre": "Hamburguesa Actualizada"}
-    updated_data = {**sample_producto_data, "nombre": "Hamburguesa Actualizada"}
-    mock_producto_service.update_producto.return_value = ProductoResponse(**updated_data)
-
-    # Act
-    response = test_client.put(f"/api/v1/productos/{sample_producto_id}", json=update_data)
-
-    # Assert
-    assert response.status_code == 200
-    assert response.json()["nombre"] == "Hamburguesa Actualizada"
-    mock_producto_service.update_producto.assert_awaited_once()
-
-
-def test_update_producto_not_found(
-    test_client, mock_db_session_dependency, mock_producto_service, sample_producto_id
-):
-    """
-    Prueba el manejo de errores al actualizar un producto que no existe.
-
-    PRECONDICIONES:
-        - El cliente de prueba (test_client) debe estar configurado
-        - El servicio de productos debe estar mockeado (mock_producto_service)
-        - Se debe tener un ID de producto válido (sample_producto_id)
-
-    PROCESO:
-        - Configura el mock para simular que el producto no existe.
-        - Realiza una solicitud PUT al endpoint.
-        - Verifica que se retorne el código de error apropiado.
-        
-    POSTCONDICIONES:
-        - La respuesta debe tener código HTTP 404 (Not Found)
-        - El mensaje de error debe indicar que no se encontró el producto
-        - El método update_producto del servicio debe haber sido llamado una vez
-    """
-    # Arrange
-    update_data = {"nombre": "Hamburguesa Actualizada"}
-    mock_producto_service.update_producto.side_effect = ProductoNotFoundError(
-        f"No se encontró el producto con ID {sample_producto_id}"
-    )
-
-    # Act
-    response = test_client.put(f"/api/v1/productos/{sample_producto_id}", json=update_data)
-
-    # Assert
-    assert response.status_code == 404
-    assert f"No se encontró el producto con ID {sample_producto_id}" in response.json()["detail"]
-    mock_producto_service.update_producto.assert_awaited_once()
-
-
-def test_update_producto_conflict(
-    test_client, mock_db_session_dependency, mock_producto_service, sample_producto_id
-):
-    """
-    Prueba el manejo de errores al actualizar un producto con nombre duplicado.
-
-    PRECONDICIONES:
-        - El cliente de prueba (test_client) debe estar configurado
-        - El servicio de productos debe estar mockeado (mock_producto_service)
-        - Se debe tener un ID de producto válido (sample_producto_id)
-
-    PROCESO:
-        - Configura el mock para simular un error de conflicto.
-        - Realiza una solicitud PUT al endpoint.
-        - Verifica que se retorne el código de error apropiado.
-        
-    POSTCONDICIONES:
-        - La respuesta debe tener código HTTP 409 (Conflict)
-        - El mensaje de error debe indicar la duplicidad del nombre
-        - El método update_producto del servicio debe haber sido llamado una vez
-    """
-    # Arrange
-    update_data = {"nombre": "Otro Producto"}
-    mock_producto_service.update_producto.side_effect = ProductoConflictError(
-        "Ya existe un producto con el nombre 'Otro Producto'"
-    )
-
-    # Act
-    response = test_client.put(f"/api/v1/productos/{sample_producto_id}", json=update_data)
-
-    # Assert
-    assert response.status_code == 409
-    assert "Ya existe un producto" in response.json()["detail"]
-    mock_producto_service.update_producto.assert_awaited_once()
-
-
 def test_delete_producto_success(
     test_client, mock_db_session_dependency, mock_producto_service, sample_producto_id
 ):
@@ -593,61 +502,19 @@ def sample_producto_completo_data():
 
     PROCESO:
         - Crea un diccionario con datos completos de un producto
-        - Incluye datos básicos, alérgenos, secciones y tipos de opciones
-        - Los valores Decimal se convierten a string para serialización JSON
+        - Incluye datos básicos, alérgenos y secciones
+        - Los valores coinciden con ProductoCompletoUpdateSchema
 
     POSTCONDICIONES:
         - Devuelve un diccionario válido para ProductoCompletoUpdateSchema
         - Los datos pueden ser usados para crear objetos de actualización masiva
     """
     return {
-        "nombre": "Pizza Margherita Completa",
         "descripcion": "Pizza clásica con ingredientes frescos",
-        "precio_base": "15.50",
-        "imagen_path": "/images/pizza-margherita.jpg",
-        "imagen_alt_text": "Pizza Margherita con tomate y mozzarella",
-        "id_categoria": str(ULID()),
         "disponible": True,
         "destacado": False,
-        "alergenos": [
-            {
-                "id_alergeno": str(ULID()),
-                "nivel_presencia": "contiene",
-                "notas": "Alérgeno de prueba 1"
-            },
-            {
-                "id_alergeno": str(ULID()),
-                "nivel_presencia": "contiene",
-                "notas": "Alérgeno de prueba 2"
-            }
-        ],
-        "secciones": [{"id_seccion": str(ULID())}, {"id_seccion": str(ULID())}],
-        "tipos_opciones": [
-            {
-                "id_tipo_opcion": str(ULID()),
-                "nombre": "Tamaño",
-                "descripcion": "Seleccione el tamaño de la pizza",
-                "seleccion_minima": 1,
-                "seleccion_maxima": 1,
-                "orden": 0,
-                "opciones": [
-                    {
-                        "id_opcion": str(ULID()),
-                        "nombre": "Pequeña",
-                        "precio_adicional": "0.00",
-                        "activo": True,
-                        "orden": 0
-                    },
-                    {
-                        "id_opcion": str(ULID()),
-                        "nombre": "Grande",
-                        "precio_adicional": "5.00",
-                        "activo": True,
-                        "orden": 1
-                    }
-                ]
-            }
-        ]
+        "alergenos": [str(ULID()), str(ULID())],  # Lista de IDs de alérgenos
+        "secciones": []  # Lista de secciones vacía para este test
     }
 
 
@@ -678,8 +545,8 @@ def sample_producto_completo_response():
         "disponible": True,
         "destacado": False,
         "alergenos": [
-            {"id": str(ULID()), "nombre": "Gluten", "icono": "gluten.png", "nivel_riesgo": "alto"},
-            {"id": str(ULID()), "nombre": "Lactosa", "icono": "lactosa.png", "nivel_riesgo": "medio"}
+            {"id": str(ULID()), "nombre": "Gluten", "icono": "gluten.png", "nivel_riesgo": "alto", "nivel_presencia": "contiene", "notas": None},
+            {"id": str(ULID()), "nombre": "Lactosa", "icono": "lactosa.png", "nivel_riesgo": "medio", "nivel_presencia": "contiene", "notas": None}
         ],
         "fecha_creacion": "2025-10-26T12:00:00",
         "fecha_modificacion": "2025-10-26T12:30:00",
@@ -717,7 +584,7 @@ def sample_producto_completo_response():
 
 
 def test_update_producto_completo_success(
-    test_client, mock_db_session_dependency, mock_producto_service, 
+    test_client, mock_db_session_dependency, mock_admin_auth, mock_producto_service,
     sample_producto_id, sample_producto_completo_data, sample_producto_completo_response
 ):
     """
@@ -744,22 +611,21 @@ def test_update_producto_completo_success(
 
     # Act
     response = test_client.put(
-        f"/api/v1/productos/{sample_producto_id}/completo",
+        f"/api/v1/productos/{sample_producto_id}",
         json=sample_producto_completo_data
     )
 
     # Assert
     assert response.status_code == 200
     response_data = response.json()
-    assert response_data["nombre"] == sample_producto_completo_data["nombre"]
     assert response_data["descripcion"] == sample_producto_completo_data["descripcion"]
-    assert response_data["precio_base"] == sample_producto_completo_data["precio_base"]
     assert response_data["disponible"] == sample_producto_completo_data["disponible"]
+    assert response_data["destacado"] == sample_producto_completo_data["destacado"]
     mock_producto_service.update_producto_completo.assert_awaited_once()
 
 
 def test_update_producto_completo_not_found(
-    test_client, mock_db_session_dependency, mock_producto_service, 
+    test_client, mock_db_session_dependency, mock_admin_auth, mock_producto_service, 
     sample_producto_id, sample_producto_completo_data
 ):
     """
@@ -787,7 +653,7 @@ def test_update_producto_completo_not_found(
 
     # Act
     response = test_client.put(
-        f"/api/v1/productos/{sample_producto_id}/completo",
+        f"/api/v1/productos/{sample_producto_id}",
         json=sample_producto_completo_data
     )
 
@@ -798,7 +664,7 @@ def test_update_producto_completo_not_found(
 
 
 def test_update_producto_completo_conflict(
-    test_client, mock_db_session_dependency, mock_producto_service, 
+    test_client, mock_db_session_dependency, mock_admin_auth, mock_producto_service, 
     sample_producto_id, sample_producto_completo_data
 ):
     """
@@ -821,23 +687,23 @@ def test_update_producto_completo_conflict(
     """
     # Arrange
     mock_producto_service.update_producto_completo.side_effect = ProductoConflictError(
-        f"Ya existe un producto con el nombre '{sample_producto_completo_data['nombre']}'"
+        "Conflicto al actualizar el producto"
     )
 
     # Act
     response = test_client.put(
-        f"/api/v1/productos/{sample_producto_id}/completo",
+        f"/api/v1/productos/{sample_producto_id}",
         json=sample_producto_completo_data
     )
 
     # Assert
     assert response.status_code == 409
-    assert "Ya existe un producto con el nombre" in response.json()["detail"]
+    assert "Conflicto" in response.json()["detail"]
     mock_producto_service.update_producto_completo.assert_awaited_once()
 
 
 def test_update_producto_completo_validation_error(
-    test_client, mock_db_session_dependency, mock_producto_service, 
+    test_client, mock_db_session_dependency, mock_admin_auth, mock_producto_service, 
     sample_producto_id, sample_producto_completo_data
 ):
     """
@@ -865,7 +731,7 @@ def test_update_producto_completo_validation_error(
 
     # Act
     response = test_client.put(
-        f"/api/v1/productos/{sample_producto_id}/completo",
+        f"/api/v1/productos/{sample_producto_id}",
         json=sample_producto_completo_data
     )
 
@@ -876,7 +742,7 @@ def test_update_producto_completo_validation_error(
 
 
 def test_update_producto_completo_internal_error(
-    test_client, mock_db_session_dependency, mock_producto_service, 
+    test_client, mock_db_session_dependency, mock_admin_auth, mock_producto_service, 
     sample_producto_id, sample_producto_completo_data
 ):
     """
@@ -902,7 +768,7 @@ def test_update_producto_completo_internal_error(
 
     # Act
     response = test_client.put(
-        f"/api/v1/productos/{sample_producto_id}/completo",
+        f"/api/v1/productos/{sample_producto_id}",
         json=sample_producto_completo_data
     )
 

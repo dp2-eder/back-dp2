@@ -28,7 +28,7 @@ class UsuarioCreate(UsuarioBase):
     password: str = Field(
         description="Contraseña del usuario", min_length=6, max_length=100
     )
-    
+
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
@@ -55,7 +55,7 @@ class UsuarioUpdate(BaseModel):
     )
     id_rol: Optional[str] = Field(default=None, description="ID del rol")
     activo: Optional[bool] = Field(default=None, description="Estado activo/inactivo")
-    
+
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: Optional[str]) -> Optional[str]:
@@ -71,7 +71,7 @@ class UsuarioResponse(UsuarioBase):
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     id: str = Field(description="Usuario ID")
-    activo: bool = Field(description="Indica si el usuario está activo")
+    #activo: bool = Field(description="Indica si el usuario está activo")
     ultimo_acceso: Optional[datetime] = Field(
         default=None, description="Último acceso del usuario"
     )
@@ -157,4 +157,3 @@ class TokenData(BaseModel):
     sub: str = Field(description="Subject (usuario ID)")
     email: Optional[str] = Field(default=None, description="Email del usuario")
     rol_id: Optional[str] = Field(default=None, description="ID del rol del usuario")
-

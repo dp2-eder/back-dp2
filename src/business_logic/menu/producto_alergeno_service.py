@@ -93,7 +93,7 @@ class ProductoAlergenoService:
         self, id: str
     ) -> ProductoAlergenoResponse:
         """
-        Obtiene una relación producto-alérgeno por su ID simple (ULID).
+        Obtiene una relación producto-alérgeno por su ID.
 
         Parameters
         ----------
@@ -110,61 +110,20 @@ class ProductoAlergenoService:
         ProductoAlergenoNotFoundError
             Si no se encuentra la relación con el ID proporcionado.
         """
-        # Buscar la relación por su ID
         producto_alergeno = await self.repository.get_by_id(id)
 
-        # Verificar si existe
         if not producto_alergeno:
             raise ProductoAlergenoNotFoundError(
                 f"No se encontró la relación con ID {id}"
             )
 
-        # Convertir y retornar como esquema de respuesta
-        return ProductoAlergenoResponse.model_validate(producto_alergeno)
-
-    async def get_producto_alergeno_by_combination(
-        self, id_producto: str, id_alergeno: str
-    ) -> ProductoAlergenoResponse:
-        """
-        Obtiene una relación producto-alérgeno por combinación (backward compatibility).
-
-        LEGACY METHOD: Usar get_producto_alergeno_by_id() para nuevas implementaciones.
-
-        Parameters
-        ----------
-        id_producto : str
-            Identificador único del producto (ULID).
-        id_alergeno : str
-            Identificador único del alérgeno (ULID).
-
-        Returns
-        -------
-        ProductoAlergenoResponse
-            Esquema de respuesta con los datos de la relación.
-
-        Raises
-        ------
-        ProductoAlergenoNotFoundError
-            Si no se encuentra la relación con los IDs proporcionados.
-        """
-        # Buscar la relación por su clave compuesta
-        producto_alergeno = await self.repository.get_by_producto_alergeno(id_producto, id_alergeno)
-
-        # Verificar si existe
-        if not producto_alergeno:
-            raise ProductoAlergenoNotFoundError(
-                f"No se encontró la relación entre producto {id_producto} "
-                f"y alérgeno {id_alergeno}"
-            )
-
-        # Convertir y retornar como esquema de respuesta
         return ProductoAlergenoResponse.model_validate(producto_alergeno)
 
     async def delete_producto_alergeno(
         self, id: str
     ) -> bool:
         """
-        Elimina una relación producto-alérgeno por su ID simple (ULID).
+        Elimina una relación producto-alérgeno por su ID.
 
         Parameters
         ----------
@@ -181,14 +140,12 @@ class ProductoAlergenoService:
         ProductoAlergenoNotFoundError
             Si no se encuentra la relación con el ID proporcionado.
         """
-        # Verificar primero si la relación existe
         producto_alergeno = await self.repository.get_by_id(id)
         if not producto_alergeno:
             raise ProductoAlergenoNotFoundError(
                 f"No se encontró la relación con ID {id}"
             )
 
-        # Eliminar la relación
         result = await self.repository.delete(id)
         return result
 
@@ -196,9 +153,7 @@ class ProductoAlergenoService:
         self, id_producto: str, id_alergeno: str
     ) -> bool:
         """
-        Elimina una relación por combinación (backward compatibility).
-
-        LEGACY METHOD: Usar delete_producto_alergeno() para nuevas implementaciones.
+        Elimina una relación por combinación producto-alérgeno.
 
         Parameters
         ----------
@@ -217,7 +172,6 @@ class ProductoAlergenoService:
         ProductoAlergenoNotFoundError
             Si no se encuentra la relación con los IDs proporcionados.
         """
-        # Verificar primero si la relación existe
         producto_alergeno = await self.repository.get_by_producto_alergeno(id_producto, id_alergeno)
         if not producto_alergeno:
             raise ProductoAlergenoNotFoundError(
@@ -225,8 +179,8 @@ class ProductoAlergenoService:
                 f"y alérgeno {id_alergeno}"
             )
 
-        # Eliminar la relación
-        result = await self.repository.delete_by_producto_alergeno(id_producto, id_alergeno)
+        # Eliminar usando el ID de la relación encontrada
+        result = await self.repository.delete(producto_alergeno.id)
         return result
 
     async def get_producto_alergenos(
@@ -247,7 +201,6 @@ class ProductoAlergenoService:
         ProductoAlergenoList
             Esquema con la lista de relaciones y el total.
         """
-        # Validar parámetros de entrada
         if skip < 0:
             raise ProductoAlergenoValidationError(
                 "El parámetro 'skip' debe ser mayor o igual a cero"
@@ -257,20 +210,17 @@ class ProductoAlergenoService:
                 "El parámetro 'limit' debe ser mayor a cero"
             )
 
-        # Obtener relaciones desde el repositorio
         producto_alergenos, total = await self.repository.get_all(skip, limit)
 
-        # Convertir modelos a esquemas de resumen
         producto_alergeno_summaries = [
             ProductoAlergenoSummary.model_validate(pa) for pa in producto_alergenos
         ]
 
-        # Retornar esquema de lista
         return ProductoAlergenoList(items=producto_alergeno_summaries, total=total)
 
-    async def get_alergenos_by_producto(self, id_producto: str) -> List:
+    async def get_alergenos_by_producto(self, id_producto: str) -> List[ProductoAlergenoResponse]:
         """
-        Obtiene todos los alérgenos asociados a un producto específico.
+        Obtiene todas las relaciones producto-alérgeno de un producto específico.
 
         Parameters
         ----------
@@ -279,8 +229,8 @@ class ProductoAlergenoService:
 
         Returns
         -------
-        List[AlergenoResponse]
-            Lista de alérgenos asociados al producto.
+        List[ProductoAlergenoResponse]
+            Lista de relaciones producto-alérgeno con información de alérgenos.
 
         Raises
         ------
@@ -292,17 +242,11 @@ class ProductoAlergenoService:
                 "El ID del producto es requerido"
             )
 
-        # Obtener alérgenos desde el repositorio
-        alergenos = await self.repository.get_alergenos_by_producto(id_producto)
+        # Obtener relaciones desde el repositorio (ya incluye alérgenos por eager loading)
+        relaciones = await self.repository.get_by_producto(id_producto)
 
-        # Convertir modelos a esquemas de respuesta
-        # Importación tardía para evitar referencias circulares
-        try:
-            from src.api.schemas.alergeno_schema import AlergenoResponse
-            return [AlergenoResponse.model_validate(alergeno) for alergeno in alergenos]
-        except ImportError as e:
-            # Si hay problema con el schema, devolver diccionarios simples
-            return [alergeno.to_dict() for alergeno in alergenos]
+        # Convertir a esquemas de respuesta
+        return [ProductoAlergenoResponse.model_validate(rel) for rel in relaciones]
 
     async def update_producto_alergeno(
         self,
@@ -310,7 +254,7 @@ class ProductoAlergenoService:
         producto_alergeno_data: ProductoAlergenoUpdate,
     ) -> ProductoAlergenoResponse:
         """
-        Actualiza una relación producto-alérgeno existente por su ID simple (ULID).
+        Actualiza una relación producto-alérgeno existente por su ID.
 
         Parameters
         ----------
@@ -329,77 +273,17 @@ class ProductoAlergenoService:
         ProductoAlergenoNotFoundError
             Si no se encuentra la relación con el ID proporcionado.
         """
-        # Convertir el esquema de actualización a un diccionario,
-        # excluyendo valores None (campos no proporcionados para actualizar)
         update_data = producto_alergeno_data.model_dump(exclude_none=True)
 
         if not update_data:
-            # Si no hay datos para actualizar, simplemente retornar la relación actual
             return await self.get_producto_alergeno_by_id(id)
 
-        # Actualizar la relación
-        updated_producto_alergeno = await self.repository.update(
-            id, **update_data
-        )
+        updated_producto_alergeno = await self.repository.update(id, **update_data)
 
-        # Verificar si la relación fue encontrada
         if not updated_producto_alergeno:
             raise ProductoAlergenoNotFoundError(
                 f"No se encontró la relación con ID {id}"
             )
 
-        # Convertir y retornar como esquema de respuesta
         return ProductoAlergenoResponse.model_validate(updated_producto_alergeno)
 
-    async def update_producto_alergeno_by_combination(
-        self,
-        id_producto: str,
-        id_alergeno: str,
-        producto_alergeno_data: ProductoAlergenoUpdate,
-    ) -> ProductoAlergenoResponse:
-        """
-        Actualiza una relación por combinación (backward compatibility).
-
-        LEGACY METHOD: Usar update_producto_alergeno() para nuevas implementaciones.
-
-        Parameters
-        ----------
-        id_producto : str
-            Identificador único del producto (ULID).
-        id_alergeno : str
-            Identificador único del alérgeno (ULID).
-        producto_alergeno_data : ProductoAlergenoUpdate
-            Datos para actualizar la relación.
-
-        Returns
-        -------
-        ProductoAlergenoResponse
-            Esquema de respuesta con los datos de la relación actualizada.
-
-        Raises
-        ------
-        ProductoAlergenoNotFoundError
-            Si no se encuentra la relación con los IDs proporcionados.
-        """
-        # Convertir el esquema de actualización a un diccionario,
-        # excluyendo valores None (campos no proporcionados para actualizar)
-        update_data = producto_alergeno_data.model_dump(exclude_none=True)
-
-        if not update_data:
-            # Si no hay datos para actualizar, simplemente retornar la relación actual
-            return await self.get_producto_alergeno_by_combination(id_producto, id_alergeno)
-
-        # Actualizar la relación
-        updated_producto_alergeno = await self.repository.update_by_producto_alergeno(
-            id_producto, id_alergeno, **update_data
-        )
-
-        # Verificar si la relación fue encontrada
-        if not updated_producto_alergeno:
-            raise ProductoAlergenoNotFoundError(
-                f"No se encontró la relación entre producto {id_producto} "
-                f"y alérgeno {id_alergeno}"
-            )
-
-        # Convertir y retornar como esquema de respuesta
-        return ProductoAlergenoResponse.model_validate(updated_producto_alergeno)

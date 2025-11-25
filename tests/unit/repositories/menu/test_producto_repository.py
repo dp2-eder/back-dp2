@@ -80,10 +80,8 @@ async def test_get_by_id():
     # Assert
     assert result is not None
     assert isinstance(result, ProductoModel)
-    assert hasattr(result, '_alergenos')
-    # assert result._alergenos == []
-    # Ahora se llama 2 veces: una para el producto, otra para los alérgenos
-    assert mock_session.execute.call_count == 2
+    assert result.nombre == "Hamburguesa"
+    assert mock_session.execute.call_count == 1
 
     # Prueba de caso negativo
     mock_session.execute.reset_mock()

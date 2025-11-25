@@ -79,24 +79,19 @@ class ProductoRepository:
         Returns
         -------
         Optional[ProductoModel]
-            El producto encontrado con sus alérgenos o None si no existe.
+            El producto encontrado con sus alérgenos cargados o None si no existe.
         """
-        # Subquery para obtener alérgenos del producto
-        alergenos_subquery = (
-            select(AlergenoModel)
-            .join(ProductoAlergenoModel, ProductoAlergenoModel.id_alergeno == AlergenoModel.id)
-            .where(ProductoAlergenoModel.id_producto == producto_id)
+        # Query principal del producto con productos_alergenos eager loaded
+        query = (
+            select(ProductoModel)
+            .where(ProductoModel.id == producto_id)
+            .options(
+                selectinload(ProductoModel.productos_alergenos)
+                .selectinload(ProductoAlergenoModel.alergeno)
+            )
         )
-
-        # Query principal del producto
-        query = select(ProductoModel).where(ProductoModel.id == producto_id)
         result = await self.session.execute(query)
         producto = result.scalars().first()
-
-        if producto:
-            # Cargar alérgenos en una propiedad temporal usando setattr para evitar warning de tipo
-            alergenos_result = await self.session.execute(alergenos_subquery)
-            setattr(producto, '_alergenos', list(alergenos_result.scalars().all()))
 
         return producto
 
@@ -104,7 +99,7 @@ class ProductoRepository:
         """
         Obtiene un producto por su ID con todas sus opciones Y tipos de opciones (eager loading).
         
-        Modified: Now includes tipo_opcion relationship for grouping.
+        Modified: Now includes tipo_opcion relationship for grouping and productos_alergenos.
         
         Parameters
         ----------
@@ -114,14 +109,16 @@ class ProductoRepository:
         Returns
         -------
         Optional[ProductoModel]
-            El producto encontrado con sus opciones y tipos cargados, o None si no existe.
+            El producto encontrado con sus opciones, tipos y alérgenos cargados, o None si no existe.
         """
         query = (
             select(ProductoModel)
             .where(ProductoModel.id == producto_id)
             .options(
                 selectinload(ProductoModel.opciones)
-                .selectinload(ProductoOpcionModel.tipo_opcion)  # Load tipo_opcion for each option
+                .selectinload(ProductoOpcionModel.tipo_opcion),
+                selectinload(ProductoModel.productos_alergenos)
+                .selectinload(ProductoAlergenoModel.alergeno)
             )
         )
         result = await self.session.execute(query)
@@ -191,21 +188,17 @@ class ProductoRepository:
                 update(ProductoModel)
                 .where(ProductoModel.id == producto_id)
                 .values(**valid_fields)
-                .returning(ProductoModel)
             )
 
             result = await self.session.execute(stmt)
             await self.session.commit()
 
-            # Obtener el resultado actualizado
-            updated_producto = result.scalars().first()
-
-            # Si no se encontró el producto, retornar None
-            if not updated_producto:
+            # Verificar si se actualizó alguna fila
+            if result.rowcount == 0:
                 return None
 
-            # Refrescar el objeto desde la base de datos
-            await self.session.refresh(updated_producto)
+            # Obtener el producto actualizado desde la base de datos
+            updated_producto = await self.get_by_id(producto_id)
 
             return updated_producto
         except SQLAlchemyError:

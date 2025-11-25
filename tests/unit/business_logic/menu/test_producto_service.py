@@ -393,6 +393,7 @@ async def test_update_producto_success(producto_service, mock_repository, sample
         }
     )
     mock_repository.update.return_value = updated_producto
+    mock_repository.get_by_id.return_value = updated_producto
 
     # Act
     result = await producto_service.update_producto(producto_id, update_data)

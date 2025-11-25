@@ -7,6 +7,10 @@ from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 
+from src.api.schemas.tipo_opciones_schema import TipoOpcionCreate
+from src.api.schemas.producto_opcion_schema import ProductoOpcionBase, ProductoOpcionCreate
+from src.api.schemas.alergeno_schema import AlergenoSummary, ProductoAlergeno
+
 if TYPE_CHECKING:
     from src.api.schemas.producto_opcion_schema import ProductoOpcionResponse
 
@@ -71,7 +75,7 @@ class ProductoResponse(ProductoBase):
     id_categoria: str = Field(description="Category ID")
     disponible: bool = Field(description="Indicates if the product is available")
     destacado: bool = Field(description="Indicates if the product is featured")
-    alergenos: List["AlergenoInfo"] = Field(default=[], description="List of allergens")
+    alergenos: List[ProductoAlergeno] = Field(default=[], description="List of allergens with presence level")
     fecha_creacion: Optional[datetime] = Field(
         default=None, description="Creation timestamp"
     )
@@ -215,58 +219,35 @@ class ProductoOpcionCompletoSchema(BaseModel):
     activo: bool = Field(default=True, description="Si la opción está activa")
     orden: int = Field(default=0, description="Orden de visualización", ge=0)
 
-
-class TipoOpcionCompletoSchema(BaseModel):
-    """Schema para tipos de opción en actualización masiva."""
-    
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
-    
-    id_tipo_opcion: str = Field(description="ID del tipo de opción")
-    nombre: str = Field(description="Nombre del tipo", min_length=1, max_length=255)
-    descripcion: Optional[str] = Field(default=None, description="Descripción del tipo")
-    seleccion_minima: int = Field(description="Selección mínima", ge=0)
-    seleccion_maxima: Optional[int] = Field(default=None, description="Selección máxima", ge=1)
-    orden: int = Field(description="Orden de visualización", ge=0)
-    opciones: List[ProductoOpcionCompletoSchema] = Field(description="Lista de opciones")
-
-
 class SeccionProductoSchema(BaseModel):
     """Schema para secciones de producto en actualización masiva."""
     
     model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
-    
-    id_seccion: str = Field(description="ID de la sección")
 
+    tipo_opcion: TipoOpcionCreate = Field(description="Tipo de opción")
+    opciones: List[ProductoOpcionBase] = Field(description="Lista de opciones en esta sección")
 
 class ProductoCompletoUpdateSchema(BaseModel):
     """Schema para actualización masiva de producto con todos sus datos."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra='forbid')
-
-    # Datos básicos del producto
-    nombre: str = Field(description="Nombre del producto", min_length=1, max_length=255)
+    
     descripcion: Optional[str] = Field(default=None, description="Descripción del producto")
-    precio_base: Decimal = Field(description="Precio base", gt=0)
-    imagen_path: Optional[str] = Field(default=None, description="Ruta imagen", max_length=255)
-    imagen_alt_text: Optional[str] = Field(default=None, description="Texto alt imagen", max_length=255)
-    id_categoria: str = Field(description="ID de la categoría")
-    disponible: bool = Field(default=True, description="Si el producto está disponible")
-    destacado: bool = Field(default=False, description="Si el producto está destacado")
-
+    disponible: bool = Field(description="Si el producto está disponible")
+    destacado: bool = Field(description="Si el producto está destacado")
+    
     # Relaciones
-    alergenos: List["ProductoAlergenoUpdateInput"] = Field(
-        default_factory=list,
-        description="Lista de alérgenos con nivel de presencia y notas"
-    )
-    secciones: List[SeccionProductoSchema] = Field(
-        default_factory=list,
-        description="Lista de secciones del producto"
-    )
-    tipos_opciones: List[TipoOpcionCompletoSchema] = Field(
-        default_factory=list,
-        description="Lista de tipos de opciones"
-    )
+    alergenos: List[str] = Field(description="Lista de IDs de alérgenos")
+    secciones: List[SeccionProductoSchema] = Field(description="Lista de secciones con opciones")
 
 
-# Rebuild para resolver forward references
-ProductoCompletoUpdateSchema.model_rebuild()
+class ProductoImagenResponse(BaseModel):
+    """Schema para respuesta de operaciones con imágenes de productos."""
+    
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+    
+    message: str = Field(description="Mensaje de confirmación")
+    producto_id: str = Field(description="ID del producto")
+    imagen_path: Optional[str] = Field(default=None, description="Ruta de la imagen (nombre del archivo)")
+    filename: Optional[str] = Field(default=None, description="Nombre original del archivo subido")
+    

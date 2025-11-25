@@ -31,7 +31,7 @@ router = APIRouter(prefix="/productos-alergenos", tags=["Productos-Alergenos"])
 )
 async def create_producto_alergeno(
     producto_alergeno_data: ProductoAlergenoCreate,
-    session: AsyncSession = Depends(get_database_session)
+    session: AsyncSession = Depends(get_database_session),
 ) -> ProductoAlergenoResponse:
     """
     Crea una nueva relación producto-alérgeno en el sistema.
@@ -50,49 +50,11 @@ async def create_producto_alergeno(
     """
     try:
         producto_alergeno_service = ProductoAlergenoService(session)
-        return await producto_alergeno_service.create_producto_alergeno(producto_alergeno_data)
+        return await producto_alergeno_service.create_producto_alergeno(
+            producto_alergeno_data
+        )
     except ProductoAlergenoConflictError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
-
-
-@router.get(
-    "/{id_producto}/{id_alergeno}",
-    response_model=ProductoAlergenoResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Obtener una relación producto-alérgeno por IDs",
-    description="Obtiene los detalles de una relación producto-alérgeno específica por sus IDs.",
-)
-async def get_producto_alergeno(
-    id_producto: str,
-    id_alergeno: str,
-    session: AsyncSession = Depends(get_database_session)
-) -> ProductoAlergenoResponse:
-    """
-    Obtiene una relación producto-alérgeno específica por sus IDs.
-
-    Args:
-        id_producto: ID del producto.
-        id_alergeno: ID del alérgeno.
-        session: Sesión de base de datos.
-
-    Returns:
-        La relación producto-alérgeno encontrada con todos sus datos.
-
-    Raises:
-        HTTPException:
-            - 404: Si no se encuentra la relación producto-alérgeno.
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        producto_alergeno_service = ProductoAlergenoService(session)
-        return await producto_alergeno_service.get_producto_alergeno_by_combination(id_producto, id_alergeno)
-    except ProductoAlergenoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -142,53 +104,6 @@ async def list_producto_alergenos(
         )
 
 
-@router.put(
-    "/{id_producto}/{id_alergeno}",
-    response_model=ProductoAlergenoResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Actualizar una relación producto-alérgeno",
-    description="Actualiza los datos de una relación producto-alérgeno existente.",
-)
-async def update_producto_alergeno(
-    id_producto: str,
-    id_alergeno: str,
-    producto_alergeno_data: ProductoAlergenoUpdate,
-    session: AsyncSession = Depends(get_database_session)
-) -> ProductoAlergenoResponse:
-    """
-    Actualiza una relación producto-alérgeno existente.
-
-    Args:
-        id_producto: ID del producto.
-        id_alergeno: ID del alérgeno.
-        producto_alergeno_data: Datos de la relación producto-alérgeno a actualizar.
-        session: Sesión de base de datos.
-
-    Returns:
-        La relación producto-alérgeno actualizada con todos sus datos.
-
-    Raises:
-        HTTPException:
-            - 404: Si no se encuentra la relación producto-alérgeno.
-            - 409: Si hay un conflicto.
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        producto_alergeno_service = ProductoAlergenoService(session)
-        return await producto_alergeno_service.update_producto_alergeno_by_combination(
-            id_producto, id_alergeno, producto_alergeno_data
-        )
-    except ProductoAlergenoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except ProductoAlergenoConflictError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
-
-
 @router.delete(
     "/{id_producto}/{id_alergeno}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -198,7 +113,7 @@ async def update_producto_alergeno(
 async def delete_producto_alergeno(
     id_producto: str,
     id_alergeno: str,
-    session: AsyncSession = Depends(get_database_session)
+    session: AsyncSession = Depends(get_database_session),
 ) -> None:
     """
     Elimina una relación producto-alérgeno existente.
@@ -215,7 +130,11 @@ async def delete_producto_alergeno(
     """
     try:
         producto_alergeno_service = ProductoAlergenoService(session)
-        result = await producto_alergeno_service.delete_producto_alergeno_by_combination(id_producto, id_alergeno)
+        result = (
+            await producto_alergeno_service.delete_producto_alergeno_by_combination(
+                id_producto, id_alergeno
+            )
+        )
         # No es necesario verificar el resultado aquí ya que delete_producto_alergeno_by_combination
         # lanza ProductoAlergenoNotFoundError si no encuentra la relación
     except ProductoAlergenoNotFoundError as e:
