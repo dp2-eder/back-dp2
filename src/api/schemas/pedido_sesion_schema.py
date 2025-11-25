@@ -179,6 +179,18 @@ class ProductoPedidoDetalle(BaseModel):
     id: str = Field(description="ID del pedido-producto")
     id_producto: str = Field(description="ID del producto")
     nombre_producto: str = Field(description="Nombre del producto")
+    precio_base: Decimal = Field(
+        description="Precio base actual del producto",
+        decimal_places=2
+    )
+    imagen_path: Optional[str] = Field(
+        default=None,
+        description="Ruta de la imagen del producto"
+    )
+    imagen_alt_text: Optional[str] = Field(
+        default=None,
+        description="Texto alternativo de la imagen"
+    )
     cantidad: int = Field(description="Cantidad pedida")
     precio_unitario: Decimal = Field(
         description="Precio unitario base del producto",
