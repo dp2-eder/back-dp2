@@ -20,6 +20,7 @@ from src.business_logic.exceptions.sesion_mesa_exceptions import (
     SesionMesaConflictError,
 )
 from src.core.enums.sesion_mesa_enums import EstadoSesionMesa
+from src.core.auth_dependencies import get_current_admin
 
 router = APIRouter(prefix="/sesiones-mesas", tags=["Sesiones de Mesa"])
 
@@ -193,6 +194,7 @@ async def update_sesion_mesa(
 async def cerrar_sesion_mesa(
     sesion_id: str,
     session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
 ) -> SesionMesaResponse:
     """
     Cierra una sesión de mesa.
