@@ -100,7 +100,8 @@ class BaseModel(DeclarativeBase):
         ----------
         data : Dict[str, Any]
             Diccionario con los datos para actualizar la instancia.
+            El campo 'id' será automáticamente ignorado.
         """
         for key, value in data.items():
-            if hasattr(self, key):
+            if key != 'id' and hasattr(self, key):
                 setattr(self, key, value)
