@@ -176,12 +176,12 @@ def test_get_nombre_rol_usuario_not_found(
     # Act
     response = test_client.get(f"/api/v1/roles/usuario/{sample_usuario_id}/nombre")
 
-    # Assert
+    # Assert - Middleware convierte a formato nuevo
     assert response.status_code == 404
-    assert f"No se encontró el usuario con ID {sample_usuario_id}" in response.json()["detail"]
+    data = response.json()
+    assert "error" in data
+    assert f"No se encontró el usuario con ID {sample_usuario_id}" in data["error"]["message"]
     mock_rol_service.get_nombre_rol_by_usuario_id.assert_awaited_once_with(sample_usuario_id)
-
-
 def test_get_nombre_rol_usuario_sin_rol_asignado(
     test_client, mock_db_session_dependency, mock_rol_service, sample_usuario_id
 ):
@@ -205,7 +205,7 @@ def test_get_nombre_rol_usuario_sin_rol_asignado(
     """
     # Arrange
     mock_rol_service.get_nombre_rol_by_usuario_id.side_effect = RolNotFoundError(
-        f"El usuario con ID {sample_usuario_id} no tiene un rol asignado"
+        f"El usuario no tiene un rol asignado"
     )
 
     # Act
@@ -213,7 +213,9 @@ def test_get_nombre_rol_usuario_sin_rol_asignado(
 
     # Assert
     assert response.status_code == 404
-    assert "no tiene un rol asignado" in response.json()["detail"]
+    data = response.json()
+    assert "error" in data
+    assert "no tiene un rol asignado" in data["error"]["message"]
     mock_rol_service.get_nombre_rol_by_usuario_id.assert_awaited_once_with(sample_usuario_id)
 
 
@@ -249,7 +251,9 @@ def test_get_nombre_rol_usuario_rol_inexistente(
 
     # Assert
     assert response.status_code == 404
-    assert "No se encontró el rol con ID" in response.json()["detail"]
+    data = response.json()
+    assert "error" in data
+    assert "No se encontró el rol con ID" in data["error"]["message"]
     mock_rol_service.get_nombre_rol_by_usuario_id.assert_awaited_once_with(sample_usuario_id)
 
 
@@ -275,12 +279,14 @@ def test_get_nombre_rol_usuario_internal_error(
         - El método get_nombre_rol_by_usuario_id del servicio debe haber sido llamado una vez
     """
     # Arrange
-    mock_rol_service.get_nombre_rol_by_usuario_id.side_effect = Exception("Error de conexión a BD")
+    mock_rol_service.get_nombre_rol_by_usuario_id.side_effect = Exception("Database connection error")
 
     # Act
     response = test_client.get(f"/api/v1/roles/usuario/{sample_usuario_id}/nombre")
 
-    # Assert
+    # Assert - Middleware convierte a 500 con formato estándar
     assert response.status_code == 500
-    assert "Error interno del servidor" in response.json()["detail"]
+    data = response.json()
+    assert "error" in data
+    assert data["error"]["type"] == "InternalServerError"
     mock_rol_service.get_nombre_rol_by_usuario_id.assert_awaited_once_with(sample_usuario_id)

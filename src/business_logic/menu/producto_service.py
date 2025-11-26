@@ -361,13 +361,16 @@ class ProductoService:
             # Sin filtro - retornar todos los productos (backward compatible)
             productos, total = await self.repository.get_all(skip, limit, id_categoria)
 
-            # Normalizar nombres y convertir modelos a esquemas de resumen
-            for producto in productos:
-                producto.nombre = normalize_product_name(producto.nombre)
-            producto_summaries = [ProductoSummary.model_validate(producto) for producto in productos]
-
-            # Retornar esquema de lista
-            return ProductoList(items=producto_summaries, total=total)
+            return ProductoList(
+                items=[
+                    ProductoSummary.model_validate({
+                        **p.to_dict(),
+                        'nombre': normalize_product_name(p.nombre)
+                    })
+                    for p in productos
+                ],
+                total=total
+            )
 
     async def _get_productos_con_local(
         self,
@@ -406,30 +409,25 @@ class ProductoService:
         productos_con_overrides = []
         for relacion in relaciones:
             producto = await self.repository.get_by_id(relacion.id_producto)
-            if producto:
-                # Filtrar por categoría si se especificó
-                if id_categoria and str(producto.id_categoria) != id_categoria:
-                    total -= 1  # Ajustar el total
-                    continue
+            if not producto:
+                continue
 
-                # Aplicar overrides (NULL = usar original, NOT NULL = usar custom)
-                producto_dict = producto.to_dict()
-                producto_dict['nombre'] = normalize_product_name(
+            # Filtrar por categoría si se especificó
+            if id_categoria and str(producto.id_categoria) != id_categoria:
+                continue
+
+            # Aplicar overrides (NULL = usar original, NOT NULL = usar custom)
+            productos_con_overrides.append(ProductoSummary.model_validate({
+                **producto.to_dict(),
+                'nombre': normalize_product_name(
                     relacion.nombre_override if relacion.nombre_override is not None else producto.nombre
-                )
-                producto_dict['precio_base'] = (
-                    relacion.precio_override if relacion.precio_override is not None else producto.precio_base
-                )
-                producto_dict['descripcion'] = (
-                    relacion.descripcion_override if relacion.descripcion_override is not None else producto.descripcion
-                )
-                producto_dict['disponible'] = (
-                    relacion.disponible_override if relacion.disponible_override is not None else producto.disponible
-                )
+                ),
+                'precio_base': relacion.precio_override if relacion.precio_override is not None else producto.precio_base,
+                'descripcion': relacion.descripcion_override if relacion.descripcion_override is not None else producto.descripcion,
+                'disponible': relacion.disponible_override if relacion.disponible_override is not None else producto.disponible,
+            }))
 
-                productos_con_overrides.append(ProductoSummary.model_validate(producto_dict))
-
-        return ProductoList(items=productos_con_overrides, total=total)
+        return ProductoList(items=productos_con_overrides, total=len(productos_con_overrides))
 
     async def update_producto(self, producto_id: str, producto_data: ProductoUpdate) -> ProductoResponse:
         """
@@ -466,15 +464,10 @@ class ProductoService:
             # Actualizar el producto
             updated_producto = await self.repository.update(producto_id, **update_data)
 
-            # Verificar si el producto fue encontrado
             if not updated_producto:
                 raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
 
-            # Normalizar el nombre antes de retornar
             updated_producto.nombre = normalize_product_name(updated_producto.nombre)
-
-            updated_producto = await self.repository.get_by_id(producto_id)
-            # Convertir y retornar como esquema base
             return ProductoResponse.model_validate(updated_producto)
         except IntegrityError:
             # Capturar errores de integridad (nombre duplicado)
@@ -526,12 +519,12 @@ class ProductoService:
             # Persistir en la base de datos usando batch insert
             created_productos = await self.repository.batch_insert(producto_models)
 
-            # Normalizar nombres y convertir a esquemas de respuesta
-            for producto in created_productos:
-                producto.nombre = normalize_product_name(producto.nombre)
             return [
-                ProductoResponse.model_validate(producto)
-                for producto in created_productos
+                ProductoResponse.model_validate({
+                    **p.to_dict(),
+                    'nombre': normalize_product_name(p.nombre)
+                })
+                for p in created_productos
             ]
         except IntegrityError:
             # Capturar errores de integridad (nombre duplicado)
@@ -590,12 +583,12 @@ class ProductoService:
                         f"No se encontraron los productos con IDs: {missing_ids}"
                     )
 
-            # Normalizar nombres y convertir a esquemas de respuesta
-            for producto in updated_productos:
-                producto.nombre = normalize_product_name(producto.nombre)
             return [
-                ProductoResponse.model_validate(producto)
-                for producto in updated_productos
+                ProductoResponse.model_validate({
+                    **p.to_dict(),
+                    'nombre': normalize_product_name(p.nombre)
+                })
+                for p in updated_productos
             ]
         except IntegrityError:
             # Capturar errores de integridad (nombre duplicado)
@@ -665,157 +658,104 @@ class ProductoService:
 
     async def update_producto_completo(
         self, producto_id: str, producto_data: ProductoCompletoUpdateSchema
-    ):
-        """
-        Actualiza completamente un producto con todos sus datos relacionados.
+    ) -> None:
+        """Actualiza producto con sus alérgenos y opciones. Reemplaza completamente las relaciones."""
+        # 1. Verificar que el producto existe
+        producto = await self.repository.get_by_id(producto_id)
+        if not producto:
+            raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
 
-        Actualiza el producto base, sus alérgenos, secciones, tipos de opciones y opciones.
-        Reemplaza completamente las relaciones existentes.
+        # 2. Actualizar datos básicos del producto
+        update_data = {
+            "descripcion": producto_data.descripcion,
+            "disponible": producto_data.disponible,
+            "destacado": producto_data.destacado,
+        }
+        await self.repository.update(producto_id, **update_data)
+
+        # 3. Actualizar alérgenos (estrategia: eliminar todos y recrear)
+        from src.repositories.menu.producto_alergeno_repository import ProductoAlergenoRepository
+        from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
         
-        **ATOMICIDAD**: Esta operación es atómica. Si cualquier paso falla, 
-        se hace rollback de todos los cambios.
-
-        Parameters
-        ----------
-        producto_id : str
-            Identificador único del producto a actualizar.
-        producto_data : ProductoCompletoUpdateSchema
-            Esquema con todos los datos del producto a actualizar.
-
-        Returns
-        -------
-        ProductoConOpcionesResponse
-            Esquema de respuesta con el producto actualizado y todas sus relaciones.
-
-        Raises
-        ------
-        ProductoNotFoundError
-            Si no se encuentra el producto con el ID especificado.
-        ProductoConflictError
-            Si hay conflictos de integridad (ej. nombre duplicado).
-        ProductoValidationError
-            Si los datos de entrada son inválidos.
-        """
-        try:
-            # 1. Verificar que el producto existe
-            producto = await self.repository.get_by_id(producto_id)
-            if not producto:
-                raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
-
-            # 2. Actualizar datos básicos del producto
-            update_data = {
-                "descripcion": producto_data.descripcion,
-                "disponible": producto_data.disponible,
-                "destacado": producto_data.destacado,
-            }
-            await self.repository.update(producto_id, **update_data)
-
-            # 3. Actualizar alérgenos (estrategia: eliminar todos y recrear)
-            from src.repositories.menu.producto_alergeno_repository import ProductoAlergenoRepository
-            from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
+        producto_alergeno_repo = ProductoAlergenoRepository(self.repository.session)
+        
+        # Eliminar todas las relaciones existentes
+        await producto_alergeno_repo.delete_by_producto(producto_id)
+        
+        # Crear nuevas relaciones si hay alérgenos
+        if producto_data.alergenos:
+            # Eliminar duplicados manteniendo el orden
+            alergenos_unicos = list(dict.fromkeys(producto_data.alergenos))
             
-            producto_alergeno_repo = ProductoAlergenoRepository(self.repository.session)
+            nuevas_relaciones = [
+                ProductoAlergenoModel(
+                    id_producto=producto_id,
+                    id_alergeno=id_alergeno,
+                    activo=True
+                )
+                for id_alergeno in alergenos_unicos
+            ]
             
-            # Eliminar todas las relaciones existentes
-            await producto_alergeno_repo.delete_by_producto(producto_id)
+            await producto_alergeno_repo.batch_create(nuevas_relaciones)
+
+        # 4. Procesar secciones (tipos de opciones y opciones)
+        if producto_data.secciones:
+            from src.repositories.pedidos.producto_opcion_repository import ProductoOpcionRepository
+            from src.repositories.pedidos.tipo_opciones_repository import TipoOpcionRepository
+            from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
+            from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
             
-            # Crear nuevas relaciones si hay alérgenos
-            if producto_data.alergenos:
-                # Eliminar duplicados manteniendo el orden
-                alergenos_unicos = list(dict.fromkeys(producto_data.alergenos))
+            producto_opcion_repo = ProductoOpcionRepository(self.repository.session)
+            tipo_opciones_repo = TipoOpcionRepository(self.repository.session)
+            
+            # Eliminar todas las opciones existentes del producto
+            await producto_opcion_repo.delete_by_producto(producto_id)
+            
+            # Procesar cada sección (tipo de opción con sus opciones)
+            for seccion in producto_data.secciones:
+                tipo_opcion_data = seccion.tipo_opcion
                 
-                nuevas_relaciones = [
-                    ProductoAlergenoModel(
-                        id_producto=producto_id,
-                        id_alergeno=id_alergeno,
-                        activo=True
+                # Buscar si ya existe el tipo de opción por código
+                tipo_existente = await tipo_opciones_repo.get_by_codigo(tipo_opcion_data.codigo)
+                
+                if tipo_existente:
+                    # Actualizar tipo existente
+                    tipo_opcion_id = tipo_existente.id
+                    await tipo_opciones_repo.update(
+                        tipo_opcion_id,
+                        nombre=tipo_opcion_data.nombre,
+                        descripcion=tipo_opcion_data.descripcion,
+                        seleccion_minima=tipo_opcion_data.seleccion_minima,
+                        seleccion_maxima=tipo_opcion_data.seleccion_maxima,
+                        orden=tipo_opcion_data.orden,
+                        activo=tipo_opcion_data.activo
                     )
-                    for id_alergeno in alergenos_unicos
+                else:
+                    # Crear nuevo tipo de opción
+                    nuevo_tipo = TipoOpcionModel(
+                        codigo=tipo_opcion_data.codigo,
+                        nombre=tipo_opcion_data.nombre,
+                        descripcion=tipo_opcion_data.descripcion,
+                        seleccion_minima=tipo_opcion_data.seleccion_minima,
+                        seleccion_maxima=tipo_opcion_data.seleccion_maxima,
+                        orden=tipo_opcion_data.orden,
+                        activo=tipo_opcion_data.activo
+                    )
+                    nuevo_tipo = await tipo_opciones_repo.create(nuevo_tipo)
+                    tipo_opcion_id = nuevo_tipo.id
+                
+                # Crear las opciones para este producto y tipo
+                nuevas_opciones = [
+                    ProductoOpcionModel(
+                        id_producto=producto_id,
+                        id_tipo_opcion=tipo_opcion_id,
+                        nombre=opcion.nombre,
+                        precio_adicional=opcion.precio_adicional,
+                        activo=opcion.activo,
+                        orden=opcion.orden
+                    )
+                    for opcion in seccion.opciones
                 ]
                 
-                await producto_alergeno_repo.batch_create(nuevas_relaciones)
-
-            # 4. Procesar secciones (tipos de opciones y opciones)
-            if producto_data.secciones:
-                from src.repositories.pedidos.producto_opcion_repository import ProductoOpcionRepository
-                from src.repositories.pedidos.tipo_opciones_repository import TipoOpcionRepository
-                from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
-                from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
-                
-                producto_opcion_repo = ProductoOpcionRepository(self.repository.session)
-                tipo_opciones_repo = TipoOpcionRepository(self.repository.session)
-                
-                # Eliminar todas las opciones existentes del producto
-                await producto_opcion_repo.delete_by_producto(producto_id)
-                
-                # Procesar cada sección (tipo de opción con sus opciones)
-                for seccion in producto_data.secciones:
-                    tipo_opcion_data = seccion.tipo_opcion
-                    
-                    # Buscar si ya existe el tipo de opción por código
-                    tipo_existente = await tipo_opciones_repo.get_by_codigo(tipo_opcion_data.codigo)
-                    
-                    if tipo_existente:
-                        # Actualizar tipo existente
-                        tipo_opcion_id = tipo_existente.id
-                        await tipo_opciones_repo.update(
-                            tipo_opcion_id,
-                            nombre=tipo_opcion_data.nombre,
-                            descripcion=tipo_opcion_data.descripcion,
-                            seleccion_minima=tipo_opcion_data.seleccion_minima,
-                            seleccion_maxima=tipo_opcion_data.seleccion_maxima,
-                            orden=tipo_opcion_data.orden,
-                            activo=tipo_opcion_data.activo
-                        )
-                    else:
-                        # Crear nuevo tipo de opción
-                        nuevo_tipo = TipoOpcionModel(
-                            codigo=tipo_opcion_data.codigo,
-                            nombre=tipo_opcion_data.nombre,
-                            descripcion=tipo_opcion_data.descripcion,
-                            seleccion_minima=tipo_opcion_data.seleccion_minima,
-                            seleccion_maxima=tipo_opcion_data.seleccion_maxima,
-                            orden=tipo_opcion_data.orden,
-                            activo=tipo_opcion_data.activo
-                        )
-                        nuevo_tipo = await tipo_opciones_repo.create(nuevo_tipo)
-                        tipo_opcion_id = nuevo_tipo.id
-                    
-                    # Crear las opciones para este producto y tipo
-                    nuevas_opciones = [
-                        ProductoOpcionModel(
-                            id_producto=producto_id,
-                            id_tipo_opcion=tipo_opcion_id,
-                            nombre=opcion.nombre,
-                            precio_adicional=opcion.precio_adicional,
-                            activo=opcion.activo,
-                            orden=opcion.orden
-                        )
-                        for opcion in seccion.opciones
-                    ]
-                    
-                    if nuevas_opciones:
-                        await producto_opcion_repo.create_batch(nuevas_opciones)
-            
-            # 5. Flush para detectar errores antes del commit
-            await self.session.flush()
-            
-            # 6. Obtener y retornar el producto actualizado con todas las relaciones
-            producto_actualizado = await self.get_producto_con_opciones(producto_id)
-            return producto_actualizado
-            
-        except ProductoNotFoundError:
-            await self.session.rollback()
-            raise
-        except ProductoConflictError:
-            await self.session.rollback()
-            raise
-        except ProductoValidationError:
-            await self.session.rollback()
-            raise
-        except IntegrityError as e:
-            await self.session.rollback()
-            raise ProductoValidationError(f"Error de integridad al actualizar producto: {str(e)}")
-        except Exception as e:
-            await self.session.rollback()
-            raise ProductoValidationError(f"Error al actualizar producto completo: {str(e)}")
+                if nuevas_opciones:
+                    await producto_opcion_repo.create_batch(nuevas_opciones)
