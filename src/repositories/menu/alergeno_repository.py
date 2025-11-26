@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from src.models.menu.alergeno_model import AlergenoModel
 
@@ -46,17 +46,22 @@ class AlergenoRepository:
             Número de registros a omitir (offset), por defecto 0.
         limit : int, optional
             Número máximo de registros a retornar, por defecto 100.
+        producto_id : Optional[str], optional
+            ID del producto para filtrar alérgenos asociados, por defecto None.
 
         Returns
         -------
-        Tuple[List[AlergenoModel], int]
-            Tupla con la lista de alérgenos y el número total de registros.
+        List[AlergenoModel]
+            Lista de instancias de AlergenoModel.
         """
         query = select(AlergenoModel)
         if producto_id:
-            query = query.join(AlergenoModel.productos).where(
-                AlergenoModel.productos.any(id=producto_id)
+            from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
+
+            query = query.join(AlergenoModel.productos_alergenos).where(
+                ProductoAlergenoModel.id_producto == producto_id
             )
+
         query = query.offset(skip).limit(limit)
 
         try:
