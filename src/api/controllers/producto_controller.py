@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_database_session
 from src.core.auth_dependencies import get_current_admin
 from src.business_logic.menu.producto_service import ProductoService
-from src.business_logic.menu.producto_img_service import ProductoImagenService
+from src.business_logic.menu.imagen_service import ImagenService
 from src.api.schemas.producto_schema import (
     ProductoCreate,
     ProductoResponse,
@@ -110,7 +110,7 @@ async def upload_producto_imagen(
     """Sube una imagen para un producto. Formatos: JPG, PNG, WEBP. Máx: 5MB."""
     service = ProductoService(session)
     await service.get_producto_by_id(producto_id)
-    imagen_path = await ProductoImagenService.save_producto_image(producto_id, file)
+    imagen_path = await ImagenService.save_producto_image(producto_id, file)
     await service.update_producto(
         producto_id=producto_id, producto_data=ProductoUpdate(imagen_path=imagen_path)
     )

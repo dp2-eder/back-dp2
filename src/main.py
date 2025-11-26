@@ -3,6 +3,7 @@ Punto de entrada principal de la aplicación FastAPI.
 """
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -25,10 +26,12 @@ def _mount_static_files(app: FastAPI) -> None:
     """Monta los archivos estáticos de la aplicación."""
     static_dir = Path("app/static/images")
     if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
         logger.info(f"Directorio estático montado: {static_dir}")
     else:
         logger.warning(f"Directorio estático no encontrado: {static_dir}")
+        os.makedirs(static_dir, exist_ok=True)
+    
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 def _configure_middleware(app: FastAPI, settings) -> None:

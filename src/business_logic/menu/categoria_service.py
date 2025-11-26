@@ -325,3 +325,105 @@ class CategoriaService:
             raise CategoriaNotFoundError("No se encontraron algunas categorías para desactivar")
 
         return await self.repository.batch_update(ids, activo=False)
+
+    async def get_categoria_by_id(self, categoria_id: str) -> CategoriaResponse:
+        """
+        Obtiene una categoría por su ID.
+
+        Parameters
+        ----------
+        categoria_id : str
+            ID de la categoría a buscar.
+
+        Returns
+        -------
+        CategoriaResponse
+            Esquema de respuesta con los datos de la categoría.
+
+        Raises
+        ------
+        CategoriaNotFoundError
+            Si no se encuentra la categoría con el ID proporcionado.
+        """
+        categoria = await self.repository.get_by_id(categoria_id)
+        if not categoria:
+            raise CategoriaNotFoundError(f"No se encontró la categoría con ID {categoria_id}")
+        
+        return CategoriaResponse.model_validate(categoria)
+
+    async def update_categoria(
+        self, categoria_id: str, categoria_data: CategoriaUpdate
+    ) -> CategoriaResponse:
+        """
+        Actualiza una categoría existente.
+
+        Parameters
+        ----------
+        categoria_id : str
+            ID de la categoría a actualizar.
+        categoria_data : CategoriaUpdate
+            Datos para actualizar la categoría.
+
+        Returns
+        -------
+        CategoriaResponse
+            Esquema de respuesta con los datos de la categoría actualizada.
+
+        Raises
+        ------
+        CategoriaNotFoundError
+            Si no se encuentra la categoría.
+        CategoriaConflictError
+            Si el nombre ya existe en otra categoría.
+        """
+        categoria = await self.repository.get_by_id(categoria_id)
+        if not categoria:
+            raise CategoriaNotFoundError(f"No se encontró la categoría con ID {categoria_id}")
+
+        update_data = categoria_data.model_dump(exclude_none=True)
+        
+        if not update_data:
+            return CategoriaResponse.model_validate(categoria)
+
+        try:
+            categoria.update_from_dict(update_data)
+            updated_categoria = await self.repository.update(categoria)
+            
+            return CategoriaResponse.model_validate(updated_categoria)
+        except IntegrityError:
+            if "nombre" in update_data:
+                raise CategoriaConflictError(
+                    f"Ya existe una categoría con el nombre '{update_data['nombre']}'"
+                )
+            raise
+
+    async def get_categorias_activas(
+        self,
+        skip: int = 0,
+        limit: int = 100
+    ) -> CategoriaList:
+        """
+        Obtiene solo las categorías activas.
+
+        Parameters
+        ----------
+        skip : int
+            Offset de paginación.
+        limit : int
+            Límite de registros.
+
+        Returns
+        -------
+        CategoriaList
+            Lista de categorías activas.
+        """
+        categorias, total = await self.repository.get_all(
+            skip=skip, 
+            limit=limit, 
+            activo=True
+        )
+        
+        return CategoriaList(
+            items=[CategoriaSummary.model_validate(c) for c in categorias],
+            total=total
+        )

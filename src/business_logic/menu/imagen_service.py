@@ -12,7 +12,7 @@ from PIL import Image
 import io
 
 
-class ProductoImagenService:
+class ImagenService:
     """Servicio para gestión de imágenes de productos."""
 
     # Configuración
@@ -43,8 +43,24 @@ class ProductoImagenService:
             )
 
     @classmethod
-    async def save_producto_image(cls, producto_id: str, file: UploadFile) -> str:
-        """Guarda y optimiza imagen del producto. Siempre guarda como JPG."""
+    async def save_image(cls, entity_id: str, file: UploadFile, prefix: str = "") -> str:
+        """
+        Guarda y optimiza una imagen de forma genérica.
+        
+        Parameters
+        ----------
+        entity_id : str
+            ID de la entidad (producto, categoría, etc.)
+        file : UploadFile
+            Archivo de imagen a guardar
+        prefix : str
+            Prefijo para el nombre del archivo (ej: "categoria_")
+            
+        Returns
+        -------
+        str
+            Nombre del archivo guardado
+        """
         cls.ensure_directory_exists()
         cls.validate_image_file(file)
         
@@ -55,7 +71,7 @@ class ProductoImagenService:
                 detail=f"Archivo demasiado grande. Máximo: {cls.MAX_FILE_SIZE // (1024*1024)}MB",
             )
 
-        filename = f"{producto_id}.jpg"
+        filename = f"{prefix}{entity_id}.jpg"
         filepath = cls.STATIC_DIR / filename
 
         try:
@@ -80,3 +96,13 @@ class ProductoImagenService:
             )
 
         return filename
+
+    @classmethod
+    async def save_producto_image(cls, producto_id: str, file: UploadFile) -> str:
+        """Guarda y optimiza imagen del producto. Siempre guarda como JPG."""
+        return await cls.save_image(producto_id, file, prefix="producto_")
+    
+    @classmethod
+    async def save_categoria_image(cls, categoria_id: str, file: UploadFile) -> str:
+        """Guarda y optimiza imagen de la categoría. Siempre guarda como JPG."""
+        return await cls.save_image(categoria_id, file, prefix="categoria_")

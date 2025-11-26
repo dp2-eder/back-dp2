@@ -80,7 +80,7 @@ async def sync_platos(
         existing_categorias = await session.execute(
             select(CategoriaModel)
         )
-        existing_map = {cat.nombre: cat for cat in existing_categorias.scalars().all()}
+        existing_map: Dict[str, Any] = {cat.nombre: cat for cat in existing_categorias.scalars().all()}
         existing_set = set(existing_map.keys())
 
         categorias_crear = [
@@ -90,9 +90,12 @@ async def sync_platos(
             for cat in categorias_to_sync
             if cat not in existing_set
         ]
-        resultados["categorias_creadas"] = len(
-            await categoria_service.batch_create_categorias(categorias_crear)
-        )
+        
+        nuevas_categorias = await categoria_service.batch_create_categorias(categorias_crear)
+        resultados["categorias_creadas"] = len(nuevas_categorias)
+        
+        for cat in nuevas_categorias:
+            existing_map[cat.nombre] = cat
 
         categorias_desactivar = [
             existing_map[cat].id

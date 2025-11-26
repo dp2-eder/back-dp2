@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 def _ensure_static_directories() -> None:
     """Verifica y crea los directorios estáticos necesarios."""
-    from src.business_logic.menu.producto_img_service import ProductoImagenService
+    from src.business_logic.menu.imagen_service import ImagenService
     
-    ProductoImagenService.ensure_directory_exists()
-    logger.info(f"Directorio de imágenes verificado: {ProductoImagenService.STATIC_DIR}")
+    ImagenService.ensure_directory_exists()
+    logger.info(f"Directorio de imágenes verificado: {ImagenService.STATIC_DIR}")
 
 
 async def _initialize_database() -> None:

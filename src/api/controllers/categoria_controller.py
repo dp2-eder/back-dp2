@@ -4,7 +4,8 @@ Endpoints para gestión de categorías.
 
 from typing import Optional
 from src.business_logic.menu.categoria_service import CategoriaService
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from src.business_logic.menu.imagen_service import ImagenService
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
@@ -13,7 +14,8 @@ from src.api.schemas.categoria_schema import (
     CategoriaResponse,
     CategoriaUpdate,
     CategoriaList,
-    CategoriaConProductosCardList
+    CategoriaConProductosCardList,
+    CategoriaImagenResponse
 )
 from src.business_logic.exceptions.categoria_exceptions import (
     CategoriaValidationError,
@@ -102,6 +104,76 @@ async def get_categorias_con_productos_cards(
     try:
         categoria_service = CategoriaService(session)
         return await categoria_service.get_categorias_con_productos_cards(skip, limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+
+@router.post("/{categoria_id}/imagen", response_model=CategoriaImagenResponse)
+async def upload_categoria_imagen(
+    categoria_id: str,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_database_session),
+    _: str = Depends(get_current_admin),
+) -> CategoriaImagenResponse:
+    """
+    Sube una imagen para una categoría.
+    
+    Formatos permitidos: JPG, PNG, WEBP.
+    Tamaño máximo: 5MB.
+    La imagen se convertirá automáticamente a JPG y se redimensionará si es necesario.
+    """
+    try:
+        service = CategoriaService(session)
+        # Verificar que la categoría existe
+        await service.get_categoria_by_id(categoria_id)
+        
+        # Guardar imagen
+        imagen_path = await ImagenService.save_categoria_image(categoria_id, file)
+        
+        # Actualizar referencia en la categoría
+        await service.update_categoria(
+            categoria_id=categoria_id, 
+            categoria_data=CategoriaUpdate(imagen_path=imagen_path)
+        )
+
+        return CategoriaImagenResponse(
+            message="Imagen subida exitosamente",
+            categoria_id=categoria_id,
+            imagen_path=imagen_path,
+            filename=file.filename,
+        )
+    except CategoriaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        # Si es HTTPException, relanzarla
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al subir imagen: {str(e)}",
+        )
+
+
+@router.put("/{categoria_id}", response_model=CategoriaResponse)
+async def update_categoria(
+    categoria_id: str,
+    categoria_data: CategoriaUpdate,
+    session: AsyncSession = Depends(get_database_session),
+    _: str = Depends(get_current_admin),
+) -> CategoriaResponse:
+    """
+    Actualiza una categoría existente.
+    """
+    try:
+        service = CategoriaService(session)
+        return await service.update_categoria(categoria_id, categoria_data)
+    except CategoriaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except CategoriaConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
