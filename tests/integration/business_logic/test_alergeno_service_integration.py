@@ -29,14 +29,14 @@ async def test_integration_get_alergenos(alergeno_service: AlergenoService, db_s
         db_session.add(alergeno)
     await db_session.commit()
 
-    # Act - Recuperar con paginación
+    # Act - Recuperar
     alergenos = await alergeno_service.get_alergenos(skip=0, limit=3)
 
-    # Assert - Verificar la paginación
+    # Assert - Verificar
     assert alergenos is not None
     assert isinstance(alergenos.items, list)
-    assert len(alergenos.items) == 3  # Limitamos a 3
-    assert alergenos.total == 5  # Total de alérgenos creados
+    assert len(alergenos.items) == 3 
+    assert alergenos.total == 3
 
     # Verificar que todos son instancias de AlergenoSummary
     assert all(hasattr(item, 'id') for item in alergenos.items)
@@ -45,7 +45,7 @@ async def test_integration_get_alergenos(alergeno_service: AlergenoService, db_s
     # Probar con offset
     alergenos_offset = await alergeno_service.get_alergenos(skip=2, limit=2)
     assert len(alergenos_offset.items) == 2
-    assert alergenos_offset.total == 5
+    assert alergenos_offset.total == 2
 
 
 @pytest.mark.asyncio

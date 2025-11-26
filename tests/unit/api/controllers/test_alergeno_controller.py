@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import patch, AsyncMock
+from src.models.menu.alergeno_model import AlergenoModel
 from ulid import ULID
 
 from src.api.schemas.alergeno_schema import AlergenoList, AlergenoSummary
@@ -28,9 +29,15 @@ async def test_list_alergenos_service_success(sample_alergeno_data):
     mock_session = AsyncMock()
     mock_repository = AsyncMock()
     
-    alergeno_summary = AlergenoSummary(**sample_alergeno_data)
-    alergeno_list = AlergenoList(items=[alergeno_summary], total=1)
-    mock_repository.get_all_paginated.return_value = alergeno_list
+    alergeno_list = [
+        AlergenoModel(
+            id=sample_alergeno_data["id"],
+            nombre=sample_alergeno_data["nombre"],
+            nivel_riesgo=sample_alergeno_data["nivel_riesgo"],
+            activo=sample_alergeno_data["activo"],
+        )
+    ]
+    mock_repository.get_all.return_value = alergeno_list
     
     service = AlergenoService(mock_session)
     service._repository = mock_repository

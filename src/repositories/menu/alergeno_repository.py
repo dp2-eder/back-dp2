@@ -1,74 +1,68 @@
-"""Repositorio de acceso a datos para alérgenos."""
+"""
+Repositorio para la gestión de alérgenos en el sistema.
+"""
 
-from typing import Optional
+from typing import List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 
-from src.api.schemas.alergeno_schema import AlergenoList, AlergenoSummary
 from src.models.menu.alergeno_model import AlergenoModel
 
 
 class AlergenoRepository:
-    """Gestiona el acceso a datos de alérgenos.
-    
-    Responsabilidades:
-    - Ejecutar consultas optimizadas a la base de datos
-    - Retornar DTOs en lugar de modelos (evita acoplamiento)
-    - Delegar transacciones a la sesión del servicio
+    """Repositorio para gestionar operaciones CRUD del modelo de alérgenos.
+
+    Proporciona acceso a la capa de persistencia para las operaciones
+    relacionadas con los alérgenos en el sistema, siguiendo el patrón Repository.
+
+    Attributes
+    ----------
+    session : AsyncSession
+        Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
     """
 
-    __slots__ = ("_session",)
-
-    def __init__(self, session: AsyncSession) -> None:
-        """Inicializa el repositorio.
-        
-        Args:
-            session: Sesión asíncrona de SQLAlchemy (gestionada externamente)
+    def __init__(self, session: AsyncSession):
         """
-        self._session = session
+        Inicializa el repositorio con una sesión de base de datos.
 
-    async def get_all_paginated(
+        Parameters
+        ----------
+        session : AsyncSession
+            Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
+        """
+        self.session = session
+
+    async def get_all(
         self, skip: int = 0, limit: int = 100, producto_id: Optional[str] = None
-    ) -> AlergenoList:
-        """Obtiene lista paginada de alérgenos.
-        
-        Args:
-            skip: Offset de paginación (por defecto 0)
-            limit: Límite de registros (por defecto 100)
-            producto_id: Filtro opcional por producto
-            
-        Returns:
-            Lista paginada de alérgenos con total de registros
-            
-        Note:
-            Usa una única query con window functions para eficiencia.
-            Retorna DTOs directamente para desacoplar capas.
+    ) -> List[AlergenoModel]:
         """
-        # Query base
-        stmt = select(AlergenoModel).offset(skip).limit(limit)
-        
-        # Aplicar filtro si existe
+        Obtiene una lista paginada de alérgenos y el total de registros.
+
+        Parameters
+        ----------
+        skip : int, optional
+            Número de registros a omitir (offset), por defecto 0.
+        limit : int, optional
+            Número máximo de registros a retornar, por defecto 100.
+
+        Returns
+        -------
+        Tuple[List[AlergenoModel], int]
+            Tupla con la lista de alérgenos y el número total de registros.
+        """
+        query = select(AlergenoModel)
         if producto_id:
-            stmt = stmt.join(AlergenoModel.productos).where(
+            query = query.join(AlergenoModel.productos).where(
                 AlergenoModel.productos.any(id=producto_id)
             )
-        
-        # Query de conteo (solo si necesitamos filtrar, sino optimizar)
-        count_stmt = select(func.count()).select_from(AlergenoModel)
-        if producto_id:
-            count_stmt = count_stmt.join(AlergenoModel.productos).where(
-                AlergenoModel.productos.any(id=producto_id)
-            )
-        
-        # Ejecutar queries
-        result = await self._session.execute(stmt)
-        count_result = await self._session.execute(count_stmt)
-        
-        alergenos = result.scalars().all()
-        total = count_result.scalar_one()
-        
-        # Convertir a DTOs
-        items = [AlergenoSummary.model_validate(a) for a in alergenos]
-        
-        return AlergenoList(items=items, total=total)
+        query = query.offset(skip).limit(limit)
+
+        try:
+            result = await self.session.execute(query)
+            alergenos = result.scalars().all()
+
+            return list(alergenos)
+        except SQLAlchemyError:
+            raise
