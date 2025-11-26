@@ -9,10 +9,12 @@ from sqlalchemy.exc import IntegrityError
 
 from src.repositories.auth.usuario_repository import UsuarioRepository
 from src.repositories.mesas.sesion_mesa_repository import SesionMesaRepository
+from src.repositories.mesas.mesa_repository import MesaRepository
 from src.models.auth.usuario_model import UsuarioModel
 from src.models.mesas.sesion_mesa_model import SesionMesaModel
 from src.core.enums.sesion_mesa_enums import EstadoSesionMesa
 from src.api.schemas.login_schema import LoginRequest, LoginResponse
+from src.business_logic.exceptions.mesa_exceptions import MesaNotFoundError
 
 
 class LoginService:
@@ -37,6 +39,7 @@ class LoginService:
         """
         self.usuario_repository = UsuarioRepository(session)
         self.sesion_mesa_repository = SesionMesaRepository(session)
+        self.mesa_repository = MesaRepository(session)
         self.session = session
 
     async def login(self, login_data: LoginRequest, id_mesa: str) -> LoginResponse:
@@ -69,15 +72,32 @@ class LoginService:
         Raises
         ------
         ValueError
-            Si el formato del email es inválido o la mesa no existe.
+            Si el formato del email es inválido.
+        MesaNotFoundError
+            Si la mesa no existe o no está activa.
         """
-        # Validar formato del email
+        # 1. Validar formato del email
         if not UsuarioModel.validar_formato_email(login_data.email):
             raise ValueError(
                 "El email debe contener 'correo', 'mail' o '@' en su formato"
             )
 
-        # Buscar si existe el correo
+        # 2. NUEVO: Validar que la mesa existe ANTES de crear/buscar usuario
+        mesa = await self.mesa_repository.get_by_id(id_mesa)
+        if mesa is None:
+            raise MesaNotFoundError(
+                f"No se encontró la mesa con ID '{id_mesa}'",
+                error_code="MESA_NOT_FOUND"
+            )
+        
+        # 2.1 Validar que la mesa está activa
+        if not mesa.activo:
+            raise MesaNotFoundError(
+                f"La mesa '{mesa.numero}' no está activa",
+                error_code="MESA_INACTIVE"
+            )
+
+        # 3. Buscar si existe el correo
         usuario = await self.usuario_repository.get_by_email(login_data.email)
 
         if usuario is None:
@@ -137,10 +157,9 @@ class LoginService:
             # Existe sesión activa: verificar si está expirada
             if sesion_mesa.esta_expirada():
                 # Si está expirada, PRIMERO finalizarla y LUEGO crear una nueva sesión
-                try:
-                    await self.sesion_mesa_repository.finalizar_sesion(sesion_mesa.id)
-                except Exception:
-                    pass  # Continuar aunque falle la finalización
+                # IMPORTANTE: Marcar la sesión anterior como FINALIZADA para mantener
+                # consistencia en la base de datos
+                await self.sesion_mesa_repository.finalizar_sesion(sesion_mesa.id)
                 
                 token_sesion = str(ULID())
                 sesion_mesa = SesionMesaModel(
