@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.alergeno_schema import AlergenoList, AlergenoSummary
 from src.business_logic.exceptions.alergeno_exceptions import AlergenoValidationError
+from src.business_logic.exceptions.base_exceptions import ValidationError
 from src.repositories.menu.alergeno_repository import AlergenoRepository
 
 
@@ -28,25 +29,8 @@ class AlergenoService:
         """
         self._repository = AlergenoRepository(session)
 
-    def _validate_pagination(self, skip: int, limit: int) -> None:
-        """Valida parámetros de paginación.
-
-        Args:
-            skip: Offset de paginación
-            limit: Límite de registros
-
-        Raises:
-            AlergenoValidationError: Si los parámetros son inválidos
-        """
-        if skip < 0:
-            raise AlergenoValidationError(
-                "El parámetro 'skip' debe ser mayor o igual a cero"
-            )
-        if limit <= 0:
-            raise AlergenoValidationError("El parámetro 'limit' debe ser mayor a cero")
-
     async def get_alergenos(
-        self, skip: int = 0, limit: int = 100, producto_id: Optional[str] = None
+        self, skip: int = 0, limit: int = 100
     ) -> AlergenoList:
         """Obtiene lista paginada de alérgenos.
 
@@ -63,10 +47,12 @@ class AlergenoService:
         Raises:
             AlergenoValidationError: Si los parámetros de paginación son inválidos
         """
-        self._validate_pagination(skip=skip, limit=limit)
-        result = await self._repository.get_all(skip=skip, limit=limit, producto_id=producto_id)
+        try:
+            result, total = await self._repository.get_all(skip=skip, limit=limit)
+        except ValidationError as e:
+            raise AlergenoValidationError(f"Error de validación en parámetros: {str(e)}")
 
         return AlergenoList(
             items=[AlergenoSummary.model_validate(alergeno) for alergeno in result],
-            total=len(result),
+            total=total,
         )

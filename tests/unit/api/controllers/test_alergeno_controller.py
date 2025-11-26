@@ -37,7 +37,7 @@ async def test_list_alergenos_service_success(sample_alergeno_data):
             activo=sample_alergeno_data["activo"],
         )
     ]
-    mock_repository.get_all.return_value = alergeno_list
+    mock_repository.get_all.return_value = (alergeno_list, 1)
     
     service = AlergenoService(mock_session)
     service._repository = mock_repository

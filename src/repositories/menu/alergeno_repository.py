@@ -49,31 +49,3 @@ class AlergenoRepository(BaseRepository[AlergenoModel]):
         """
         query = select(AlergenoModel).order_by(AlergenoModel.nombre)
         return await self._fetch_paginated(query, skip, limit)
-
-    async def get_by_producto(
-        self, producto_id: str, skip: int = 0, limit: int = 100
-    ) -> Tuple[List[AlergenoModel], int]:
-        """
-        Obtiene alérgenos asociados a un producto específico con paginación.
-
-        Parameters
-        ----------
-        producto_id : str
-            ID del producto para filtrar alérgenos asociados.
-        skip : int, optional
-            Número de registros a omitir (offset), por defecto 0.
-        limit : int, optional
-            Número máximo de registros a retornar, por defecto 100.
-
-        Returns
-        -------
-        Tuple[List[AlergenoModel], int]
-            Tupla con la lista de alérgenos y el total de registros.
-        """
-        query = (
-            select(AlergenoModel)
-            .join(ProductoAlergenoModel, AlergenoModel.id == ProductoAlergenoModel.id_alergeno)
-            .where(ProductoAlergenoModel.id_producto == producto_id)
-            .order_by(AlergenoModel.nombre)
-        )
-        return await self._fetch_paginated(query, skip, limit)

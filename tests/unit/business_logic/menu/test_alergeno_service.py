@@ -8,6 +8,7 @@ from datetime import datetime
 
 from src.business_logic.menu.alergeno_service import AlergenoService
 from src.api.schemas.alergeno_schema import AlergenoList, AlergenoSummary
+from src.business_logic.exceptions.base_exceptions import ValidationError
 from src.business_logic.exceptions.alergeno_exceptions import AlergenoValidationError
 from src.core.enums.alergeno_enums import NivelRiesgo
 
@@ -56,7 +57,7 @@ async def test_get_alergenos_success(
         )
     ]
 
-    mock_repository.get_all.return_value = alergeno_list
+    mock_repository.get_all.return_value = (alergeno_list, 1)
 
     # Act
     result = await alergeno_service.get_alergenos(skip=0, limit=10)
@@ -65,22 +66,28 @@ async def test_get_alergenos_success(
     assert result.total == 1
     assert len(result.items) == 1
     assert result.items[0].nombre == sample_alergeno_data["nombre"]
-    mock_repository.get_all.assert_called_once_with(skip=0, limit=10, producto_id=None)
+    mock_repository.get_all.assert_called_once_with(skip=0, limit=10)
 
 
 @pytest.mark.asyncio
 async def test_get_alergenos_validation_error_skip_negativo(alergeno_service):
     """Prueba el manejo de errores cuando skip es negativo."""
+    # Arrange
+    alergeno_service._repository.get_all.side_effect = ValidationError("El parámetro 'skip' debe ser mayor o igual a cero")
+
     # Act & Assert
     with pytest.raises(AlergenoValidationError) as excinfo:
         await alergeno_service.get_alergenos(skip=-1, limit=10)
-    assert "skip" in str(excinfo.value).lower()
+    assert "validación" in str(excinfo.value).lower()
 
 
 @pytest.mark.asyncio
 async def test_get_alergenos_validation_error_limit_cero(alergeno_service):
     """Prueba el manejo de errores cuando limit es cero."""
+    # Arrange
+    alergeno_service._repository.get_all.side_effect = ValidationError("El parámetro 'limit' debe ser mayor a cero")
+
     # Act & Assert
     with pytest.raises(AlergenoValidationError) as excinfo:
         await alergeno_service.get_alergenos(skip=0, limit=0)
-    assert "limit" in str(excinfo.value).lower()
+    assert "validación" in str(excinfo.value).lower()

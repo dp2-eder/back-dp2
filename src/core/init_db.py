@@ -31,11 +31,13 @@ DEFAULT_ROLES = [
         "nombre": "CLIENTE",
         "descripcion": "Usuario cliente del restaurante con acceso temporal",
         "activo": True,
+        "es_default": True,
     },
     {
         "nombre": "ADMINISTRADOR",
         "descripcion": "Administrador del sistema con acceso completo",
         "activo": True,
+        "es_default": False,
     },
 ]
 

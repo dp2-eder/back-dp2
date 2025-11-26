@@ -6,7 +6,7 @@ from typing import Optional, List, Tuple
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
 
 from src.repositories.base_repository import BaseRepository
@@ -30,24 +30,6 @@ class CategoriaRepository(BaseRepository[CategoriaModel]):
             Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
         """
         super().__init__(session, CategoriaModel)
-
-    async def get_by_nombre(self, nombre: str) -> Optional[CategoriaModel]:
-        """
-        Obtiene una categoría por su nombre.
-
-        Parameters
-        ----------
-        nombre : str
-            Nombre de la categoría a buscar.
-
-        Returns
-        -------
-        Optional[CategoriaModel]
-            La categoría encontrada o None si no existe.
-        """
-        query = select(CategoriaModel).where(CategoriaModel.nombre == nombre)
-        result = await self.session.execute(query)
-        return result.scalars().first()
 
     async def get_all(
         self, 
@@ -187,3 +169,27 @@ class CategoriaRepository(BaseRepository[CategoriaModel]):
         except SQLAlchemyError:
             await self.session.rollback()
             raise
+
+    async def exist_all_by_ids(self, ids: List[str]) -> bool:
+        """
+        Verifica si todas las categorías con los IDs proporcionados existen.
+
+        Parameters
+        ----------
+        ids : List[str]
+            Lista de IDs de las categorías a verificar.
+
+        Returns
+        -------
+        bool
+            True si todas las categorías existen, False en caso contrario.
+        """
+        if not ids:
+            return True
+
+        unique_ids = set(ids)
+        query = select(func.count()).where(CategoriaModel.id.in_(unique_ids))
+        result = await self.session.execute(query)
+        count = result.scalar() or 0
+
+        return count == len(unique_ids)
