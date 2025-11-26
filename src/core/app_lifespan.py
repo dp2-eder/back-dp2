@@ -25,11 +25,11 @@ def _ensure_static_directories() -> None:
 
 
 async def _initialize_database() -> None:
-    """Inicializa las tablas de la base de datos."""
-    import asyncio
-    
+    """Inicializa las tablas de la base de datos y carga datos por defecto."""
+    from src.core.init_db import database_initialization
     await create_tables()
     logger.info("Tablas de base de datos inicializadas")
+    await database_initialization()
 
 
 @asynccontextmanager
