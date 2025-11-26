@@ -1,14 +1,20 @@
 """
 Tests de integración para sesiones compartidas en LoginService.
 Verifica que múltiples usuarios puedan compartir la misma sesión de mesa.
+También verifica validación de mesa y manejo de sesiones expiradas.
 """
 
 import pytest
+from datetime import datetime, timedelta
 
 from src.business_logic.auth.login_service import LoginService
 from src.api.schemas.login_schema import LoginRequest
 from src.models.mesas.mesa_model import MesaModel
+from src.models.mesas.sesion_mesa_model import SesionMesaModel
+from src.core.enums.sesion_mesa_enums import EstadoSesionMesa
 from src.repositories.mesas.usuario_sesion_mesa_repository import UsuarioSesionMesaRepository
+from src.repositories.mesas.sesion_mesa_repository import SesionMesaRepository
+from src.business_logic.exceptions.mesa_exceptions import MesaNotFoundError
 
 
 @pytest.mark.asyncio
@@ -173,3 +179,141 @@ class TestLoginServiceSesionesCompartidas:
         assert response_mesa1.token_sesion != response_mesa2.token_sesion
         # Sesiones diferentes
         assert response_mesa1.id_sesion_mesa != response_mesa2.id_sesion_mesa
+
+
+@pytest.mark.asyncio
+class TestLoginServiceValidacionMesa:
+    """Tests de integración para validación de mesa."""
+
+    async def test_login_mesa_no_existe_lanza_error(self, db_session):
+        """
+        Test: Login con ID de mesa que no existe debe lanzar MesaNotFoundError.
+        """
+        # Arrange
+        login_service = LoginService(db_session)
+        usuario_data = LoginRequest(
+            email="test@correo.com",
+            nombre="Test Usuario"
+        )
+
+        # Act & Assert
+        with pytest.raises(MesaNotFoundError) as exc_info:
+            await login_service.login(usuario_data, "ID_QUE_NO_EXISTE")
+
+        assert exc_info.value.error_code == "MESA_NOT_FOUND"
+
+    async def test_login_mesa_inactiva_lanza_error(self, db_session):
+        """
+        Test: Login con mesa inactiva debe lanzar MesaNotFoundError.
+        """
+        # Arrange
+        mesa_inactiva = MesaModel(numero=99, capacidad=4, activo=False)
+        db_session.add(mesa_inactiva)
+        await db_session.commit()
+        await db_session.refresh(mesa_inactiva)
+
+        login_service = LoginService(db_session)
+        usuario_data = LoginRequest(
+            email="test@correo.com",
+            nombre="Test Usuario"
+        )
+
+        # Act & Assert
+        with pytest.raises(MesaNotFoundError) as exc_info:
+            await login_service.login(usuario_data, mesa_inactiva.id)
+
+        assert exc_info.value.error_code == "MESA_INACTIVE"
+
+
+@pytest.mark.asyncio
+class TestLoginServiceSesionExpirada:
+    """Tests de integración para manejo de sesiones expiradas."""
+
+    async def test_login_sesion_expirada_crea_nueva_y_finaliza_anterior(self, db_session):
+        """
+        Test: Cuando hay una sesión expirada, debe:
+        1. Marcar la sesión expirada como FINALIZADA
+        2. Crear una nueva sesión ACTIVA
+        3. Retornar la nueva sesión
+        """
+        # Arrange
+        mesa = MesaModel(numero=50, capacidad=4)
+        db_session.add(mesa)
+        await db_session.commit()
+        await db_session.refresh(mesa)
+
+        login_service = LoginService(db_session)
+        sesion_repo = SesionMesaRepository(db_session)
+
+        # Primer login - crea sesión
+        usuario1_data = LoginRequest(
+            email="user1@correo.com",
+            nombre="Usuario 1"
+        )
+        response1 = await login_service.login(usuario1_data, mesa.id)
+        await db_session.commit()
+
+        # Simular que la sesión expiró: modificar fecha_inicio a 3 horas atrás
+        sesion_original = await sesion_repo.get_by_id(response1.id_sesion_mesa)
+        sesion_original.fecha_inicio = datetime.now() - timedelta(hours=3)
+        await db_session.commit()
+        await db_session.refresh(sesion_original)
+
+        # Verificar que la sesión está expirada
+        assert sesion_original.esta_expirada() is True
+
+        # Act - Segundo login con sesión expirada
+        usuario2_data = LoginRequest(
+            email="user2@correo.com",
+            nombre="Usuario 2"
+        )
+        response2 = await login_service.login(usuario2_data, mesa.id)
+        await db_session.commit()
+
+        # Assert
+        # Debe ser una sesión diferente
+        assert response2.id_sesion_mesa != response1.id_sesion_mesa
+        assert response2.token_sesion != response1.token_sesion
+
+        # Verificar que la sesión original fue marcada como FINALIZADA
+        await db_session.refresh(sesion_original)
+        assert sesion_original.estado == EstadoSesionMesa.FINALIZADA
+        assert sesion_original.fecha_fin is not None
+
+        # Verificar que la nueva sesión está ACTIVA
+        nueva_sesion = await sesion_repo.get_by_id(response2.id_sesion_mesa)
+        assert nueva_sesion.estado == EstadoSesionMesa.ACTIVA
+
+    async def test_login_sesion_activa_valida_reutiliza(self, db_session):
+        """
+        Test: Cuando hay una sesión activa y válida (no expirada),
+        debe reutilizarla sin crear una nueva.
+        """
+        # Arrange
+        mesa = MesaModel(numero=51, capacidad=4)
+        db_session.add(mesa)
+        await db_session.commit()
+        await db_session.refresh(mesa)
+
+        login_service = LoginService(db_session)
+
+        # Primer login - crea sesión
+        usuario1_data = LoginRequest(
+            email="userA@correo.com",
+            nombre="Usuario A"
+        )
+        response1 = await login_service.login(usuario1_data, mesa.id)
+        await db_session.commit()
+
+        # Act - Segundo login inmediato (sesión aún válida)
+        usuario2_data = LoginRequest(
+            email="userB@correo.com",
+            nombre="Usuario B"
+        )
+        response2 = await login_service.login(usuario2_data, mesa.id)
+        await db_session.commit()
+
+        # Assert
+        # Deben compartir la misma sesión
+        assert response2.id_sesion_mesa == response1.id_sesion_mesa
+        assert response2.token_sesion == response1.token_sesion

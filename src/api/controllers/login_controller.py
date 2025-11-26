@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_database_session
 from src.business_logic.auth.login_service import LoginService
 from src.api.schemas.login_schema import LoginRequest, LoginResponse
+from src.business_logic.exceptions.mesa_exceptions import MesaNotFoundError
 
 # Router para login
 router = APIRouter(prefix="/login", tags=["Login"])
@@ -78,7 +79,34 @@ router = APIRouter(prefix="/login", tags=["Login"])
             }
         },
         400: {
-            "description": "Error de validación (formato de email inválido, mesa no existe, etc.)"
+            "description": "Error de validación (formato de email inválido)"
+        },
+        404: {
+            "description": "Mesa no encontrada o inactiva",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "mesa_no_existe": {
+                            "summary": "Mesa no existe",
+                            "value": {
+                                "detail": {
+                                    "message": "No se encontró la mesa con ID '01HXX...'",
+                                    "code": "MESA_NOT_FOUND"
+                                }
+                            }
+                        },
+                        "mesa_inactiva": {
+                            "summary": "Mesa inactiva",
+                            "value": {
+                                "detail": {
+                                    "message": "La mesa '5' no está activa",
+                                    "code": "MESA_INACTIVE"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         },
         500: {
             "description": "Error interno del servidor"
@@ -111,6 +139,7 @@ async def login_temporal(
     ------
     HTTPException
         400: Si hay errores de validación
+        404: Si la mesa no existe o no está activa
         500: Si hay errores internos del servidor
     """
     try:
@@ -125,6 +154,16 @@ async def login_temporal(
 
         return response
 
+    except MesaNotFoundError as e:
+        # Mesa no encontrada o inactiva
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "message": str(e),
+                "code": e.error_code
+            }
+        )
     except ValueError as e:
         # Errores de validación
         await db.rollback()
