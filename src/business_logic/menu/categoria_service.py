@@ -203,7 +203,7 @@ class CategoriaService:
                 )
                 for categoria_data in categorias_data
             ]
-            created_categorias = await self.repository.batch_insert(categoria_models)
+            created_categorias = await self.repository.batch_create(categoria_models)
             # Normalizar nombres y convertir a esquemas de respuesta
             for categoria in created_categorias:
                 categoria.nombre = normalize_category_name(categoria.nombre)

@@ -95,7 +95,7 @@ class CategoriaRepository(BaseRepository[CategoriaModel]):
 
         return await self._fetch_paginated(query, skip, limit)
 
-    async def batch_insert(
+    async def batch_create(
         self, categorias: List[CategoriaModel]
     ) -> List[CategoriaModel]:
         """
@@ -123,7 +123,6 @@ class CategoriaRepository(BaseRepository[CategoriaModel]):
             self.session.add_all(categorias)
             await self.session.flush()
             await self.session.commit()
-            await self.session.refresh(categorias)
             
             return categorias
         except SQLAlchemyError:

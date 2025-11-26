@@ -361,9 +361,9 @@ class ProductoRepository:
             return 0
 
         try:
-            result = await self.session.execute(update(ProductoModel), bulk_data)
+            await self.session.execute(update(ProductoModel), bulk_data)
             await self.session.commit()
-            return result.rowcount
+            return len(bulk_data)
         except SQLAlchemyError:
             await self.session.rollback()
             raise

@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, Dict
+from typing import Any, List, Tuple, Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -533,67 +533,42 @@ class ProductoService:
             )
 
     async def batch_update_productos(
-        self, updates: List[Tuple[str, ProductoUpdate]]
-    ) -> List[ProductoResponse]:
+        self, ids: List[str], data: List[Dict[str, Any]]
+    ) -> int:
         """
         Actualiza múltiples productos en una sola operación.
 
         Parameters
         ----------
-        updates : List[Tuple[str, ProductoUpdate]]
-            Lista de tuplas con el ID (ULID) del producto y los datos para actualizarlo.
+        ids : List[str]
+            Lista de IDs de los productos a actualizar.
+        data : List[Dict[str, Any]]
+            Lista de diccionarios con los datos para actualizar cada producto.
 
         Returns
         -------
-        List[ProductoResponse]
-            Lista de esquemas de respuesta con los datos de los productos actualizados.
+        int
+            Número de productos actualizados.
 
         Raises
         ------
         ProductoNotFoundError
-            Si alguno de los productos no existe.
+            Si alguno de los productos no se encuentra.
         ProductoConflictError
-            Si hay conflictos de integridad (nombres duplicados).
+            Si ya existe otro producto con el mismo nombre.
         """
-        if not updates:
-            return []
+        if not ids or not data or len(ids) != len(data):
+            return 0
 
         try:
-            # Preparar los datos para el repositorio
-            repository_updates = []
+            updated_count = await self.repository.batch_update(ids, data)
+            if updated_count != len(ids):
+                raise ProductoNotFoundError("No se encontraron los productos")
 
-            for producto_id, producto_data in updates:
-                # Convertir el esquema de actualización a un diccionario,
-                # excluyendo valores None (campos no proporcionados)
-                update_data = producto_data.model_dump(exclude_none=True)
-
-                if update_data:  # Solo incluir si hay datos para actualizar
-                    repository_updates.append((producto_id, update_data))
-
-            # Realizar actualización en lote
-            updated_productos = await self.repository.batch_update(repository_updates)
-
-            # Verificar si todos los productos fueron actualizados
-            if len(updated_productos) != len(repository_updates):
-                missing_ids = set(u[0] for u in repository_updates) - set(
-                    str(p.id) for p in updated_productos
-                )
-                if missing_ids:
-                    raise ProductoNotFoundError(
-                        f"No se encontraron los productos con IDs: {missing_ids}"
-                    )
-
-            return [
-                ProductoResponse.model_validate({
-                    **p.to_dict(),
-                    'nombre': normalize_product_name(p.nombre)
-                })
-                for p in updated_productos
-            ]
+            return updated_count
         except IntegrityError:
-            # Capturar errores de integridad (nombre duplicado)
             raise ProductoConflictError(
-                "Una o más actualizaciones causaron conflictos de integridad"
+                "Uno o más productos ya existen con el mismo nombre"
             )
 
     async def get_productos_cards_by_categoria(

@@ -63,6 +63,10 @@ async def sync_platos(
         Si ocurre un error durante el proceso de sincronización
     """
     try:
+        from src.models.menu.producto_model import ProductoModel
+        from src.models.menu.categoria_model import CategoriaModel
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
         categoria_service = CategoriaService(session)
         producto_service = ProductoService(session)
         resultados = {
@@ -73,8 +77,10 @@ async def sync_platos(
         }
 
         categorias_to_sync = set([prod.categoria for prod in productos_domotica])
-        existing_categorias = await categoria_service.get_categorias()
-        existing_map = {cat.nombre: cat for cat in existing_categorias.items}
+        existing_categorias = await session.execute(
+            select(CategoriaModel)
+        )
+        existing_map = {cat.nombre: cat for cat in existing_categorias.scalars().all()}
         existing_set = set(existing_map.keys())
 
         categorias_crear = [
@@ -107,11 +113,6 @@ async def sync_platos(
         productos_to_sync = {
             (prod.categoria, prod.nombre): prod for prod in productos_domotica
         }
-        from src.models.menu.producto_model import ProductoModel
-        from src.models.menu.categoria_model import CategoriaModel
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
         result = await session.execute(
             select(ProductoModel).options(selectinload(ProductoModel.categoria))
         )
@@ -128,7 +129,7 @@ async def sync_platos(
                 id_categoria=existing_map[prod.categoria].id,
             )
             for key, prod in productos_to_sync.items()
-            if key not in existing_prod_set
+            if key not in existing_prod_set and prod.nombre.strip() != ""
         ]
         resultados["productos_creados"] = len(
             await producto_service.batch_create_productos(productos_crear)
