@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _mount_static_files(app: FastAPI) -> None:
     """Monta los archivos estáticos de la aplicación."""
-    static_dir = Path("app/static")
+    static_dir = Path("app/static/images")
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
         logger.info(f"Directorio estático montado: {static_dir}")

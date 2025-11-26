@@ -16,6 +16,7 @@ from src.api.schemas.producto_schema import (
     ProductoConOpcionesResponse,
     ProductoCompletoUpdateSchema,
     ProductoImagenResponse,
+    ProductoUpdate,
 )
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
@@ -108,11 +109,11 @@ async def upload_producto_imagen(
 ) -> ProductoImagenResponse:
     """Sube una imagen para un producto. Formatos: JPG, PNG, WEBP. Máx: 5MB."""
     service = ProductoService(session)
-    producto = await service.get_producto_by_id(producto_id)
-    
+    await service.get_producto_by_id(producto_id)
     imagen_path = await ProductoImagenService.save_producto_image(producto_id, file)
-    producto.imagen_path = imagen_path
-    await session.commit()
+    await service.update_producto(
+        producto_id=producto_id, producto_data=ProductoUpdate(imagen_path=imagen_path)
+    )
 
     return ProductoImagenResponse(
         message="Imagen subida exitosamente",

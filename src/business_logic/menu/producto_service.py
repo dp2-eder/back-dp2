@@ -168,7 +168,7 @@ class ProductoService:
 
         Parameters
         ----------
-        producto_data : ProductoCreate
+        producto_data: ProductoCreate
             Datos para crear el nuevo producto.
 
         Returns
@@ -182,7 +182,6 @@ class ProductoService:
             Si ya existe un producto con el mismo nombre.
         """
         try:
-            # Crear modelo de producto desde los datos
             producto = ProductoModel(
                 id_categoria=producto_data.id_categoria,
                 nombre=producto_data.nombre,
@@ -191,17 +190,14 @@ class ProductoService:
                 imagen_path=producto_data.imagen_path,
                 imagen_alt_text=producto_data.imagen_alt_text,
             )
-
-            # Persistir en la base de datos
+            
             created_producto = await self.repository.create(producto)
-
-            # Normalizar el nombre antes de retornar
             created_producto.nombre = normalize_product_name(created_producto.nombre)
-
-            # Convertir y retornar como esquema de respuesta
-            return ProductoResponse.model_validate(created_producto)
+            
+            producto_dict = created_producto.to_dict()
+            producto_dict['alergenos'] = []
+            return ProductoResponse.model_validate(producto_dict)
         except IntegrityError:
-            # Capturar errores de integridad (nombre duplicado)
             raise ProductoConflictError(
                 f"Ya existe un producto con el nombre '{producto_data.nombre}'"
             )
@@ -212,7 +208,7 @@ class ProductoService:
 
         Parameters
         ----------
-        producto_id : str
+        producto_id: str
             Identificador único del producto a buscar (ULID).
 
         Returns
@@ -468,7 +464,12 @@ class ProductoService:
                 raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
 
             updated_producto.nombre = normalize_product_name(updated_producto.nombre)
-            return ProductoResponse.model_validate(updated_producto)
+
+            # Convertir a dict y transformar alérgenos para el esquema de respuesta
+            producto_dict = updated_producto.to_dict()
+            producto_dict['alergenos'] = self._transformar_alergenos_a_schema(updated_producto)
+
+            return ProductoResponse.model_validate(producto_dict)
         except IntegrityError:
             # Capturar errores de integridad (nombre duplicado)
             if "nombre" in update_data:
