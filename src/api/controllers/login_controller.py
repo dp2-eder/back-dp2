@@ -22,64 +22,165 @@ router = APIRouter(prefix="/login", tags=["Login"])
     description="""
     Endpoint para login simplificado de usuarios temporales del restaurante.
 
-    **IMPORTANTE:** Múltiples usuarios pueden compartir la misma sesión de mesa.
-    Cuando varios usuarios se loguean a la misma mesa, todos comparten el mismo
-    token_sesion, permitiendo colaboración en pedidos.
+    ## Descripción General
+    
+    Este endpoint permite a los usuarios temporales (clientes) iniciar sesión en una mesa
+    del restaurante. Múltiples usuarios pueden compartir la misma sesión de mesa,
+    permitiendo colaboración en pedidos grupales.
 
-    **Flujo:**
-    1. Valida formato del email (debe contener 'correo', 'mail' o '@')
-    2. Si el correo NO existe: crea nuevo usuario
-    3. Si el correo existe:
-       - Si el nombre NO coincide: actualiza el nombre
-       - Si coincide: no hace nada
-    4. Actualiza ultimo_acceso
-    5. Busca sesión activa de la mesa:
-       - Si NO existe: crea nueva sesión y asocia al usuario
-       - Si existe y NO está expirada: asocia al usuario a la sesión existente (comparte token)
-       - Si existe y está expirada: crea nueva sesión y asocia al usuario
-    6. Retorna id_usuario, id_sesion_mesa, token_sesion (compartido) y fecha_expiracion
+    ## Flujo de Login
 
-    **Parámetros de consulta:**
-    - `id_mesa`: ID de la mesa donde se realiza el login (requerido)
+    1. **Validación de mesa** (NUEVO):
+       - Verifica que la mesa exista en el sistema
+       - Verifica que la mesa esté activa
+       - Si falla → HTTP 404 con código `MESA_NOT_FOUND` o `MESA_INACTIVE`
+    
+    2. **Validación de email**:
+       - El email debe contener 'correo', 'mail' o '@'
+       - Si falla → HTTP 422 (validación Pydantic)
+    
+    3. **Gestión de usuario**:
+       - Si el correo NO existe → Crea nuevo usuario
+       - Si el correo existe y nombre difiere → Actualiza nombre
+       - Actualiza `ultimo_acceso`
+    
+    4. **Gestión de sesión de mesa**:
+       - Si NO existe sesión activa → Crea nueva sesión (duración: 2 horas)
+       - Si existe sesión **expirada** → Marca como `FINALIZADA` y crea nueva
+       - Si existe sesión **válida** → Asocia usuario a sesión existente
+    
+    5. **Respuesta**: Retorna credenciales de sesión
 
-    **Ejemplo de uso (Sesión Compartida):**
-    ```
-    # Usuario 1 crea la sesión
+    ## Sesiones Compartidas
+    
+    Cuando varios usuarios se loguean a la misma mesa, todos comparten:
+    - El mismo `token_sesion`
+    - El mismo `id_sesion_mesa`
+    - La misma `fecha_expiracion`
+
+    ## Expiración de Sesiones
+    
+    Una sesión se considera **expirada** cuando:
+    - Su estado es `FINALIZADA`, o
+    - Han pasado más de `duracion_minutos` (por defecto 120 min) desde `fecha_inicio`
+    
+    Cuando un usuario intenta unirse a una sesión expirada:
+    1. La sesión anterior se marca como `FINALIZADA`
+    2. Se crea una nueva sesión `ACTIVA`
+    3. El usuario se asocia a la nueva sesión
+
+    ## Códigos de Error
+
+    | HTTP | Código | Descripción |
+    |------|--------|-------------|
+    | 404 | `MESA_NOT_FOUND` | La mesa no existe en la base de datos |
+    | 404 | `MESA_INACTIVE` | La mesa existe pero está desactivada |
+    | 422 | - | Error de validación (email inválido, campos faltantes) |
+    | 400 | - | Otros errores de validación de negocio |
+    | 500 | - | Error interno del servidor |
+
+    ## Ejemplo de Uso
+
+    ### Caso 1: Primer usuario crea sesión
+    ```json
     POST /api/v1/login?id_mesa=01HXXX...
     {
         "email": "juan@correo.com",
         "nombre": "Juan Pérez"
     }
-    # Respuesta: token_sesion = "01HYYY..."
+    
+    // Respuesta 200:
+    {
+        "status": 200,
+        "code": "SUCCESS",
+        "id_usuario": "01HABC...",
+        "id_sesion_mesa": "01HDEF...",
+        "token_sesion": "01HGHI...",
+        "message": "Login exitoso",
+        "fecha_expiracion": "2025-11-26T16:30:00"
+    }
+    ```
 
-    # Usuario 2 se une a la misma mesa → comparte el mismo token
+    ### Caso 2: Segundo usuario comparte sesión
+    ```json
     POST /api/v1/login?id_mesa=01HXXX...
     {
         "email": "maria@correo.com",
         "nombre": "María García"
     }
-    # Respuesta: token_sesion = "01HYYY..." (MISMO TOKEN)
+    
+    // Respuesta 200 (MISMO token_sesion):
+    {
+        "status": 200,
+        "code": "SUCCESS",
+        "id_usuario": "01HJKL...",  // Diferente usuario
+        "id_sesion_mesa": "01HDEF...",  // MISMA sesión
+        "token_sesion": "01HGHI...",  // MISMO token
+        "message": "Login exitoso",
+        "fecha_expiracion": "2025-11-26T16:30:00"
+    }
+    ```
+
+    ### Caso 3: Mesa no existe
+    ```json
+    POST /api/v1/login?id_mesa=ID_INEXISTENTE
+    {
+        "email": "test@correo.com",
+        "nombre": "Test"
+    }
+    
+    // Respuesta 404:
+    {
+        "detail": {
+            "message": "No se encontró la mesa con ID 'ID_INEXISTENTE'",
+            "code": "MESA_NOT_FOUND"
+        }
+    }
+    ```
+
+    ### Caso 4: Mesa inactiva
+    ```json
+    POST /api/v1/login?id_mesa=01HMESA_INACTIVA
+    {
+        "email": "test@correo.com",
+        "nombre": "Test"
+    }
+    
+    // Respuesta 404:
+    {
+        "detail": {
+            "message": "La mesa '5' no está activa",
+            "code": "MESA_INACTIVE"
+        }
+    }
     ```
     """,
     responses={
         200: {
-            "description": "Login exitoso",
+            "description": "Login exitoso - Usuario autenticado y asociado a sesión de mesa",
             "content": {
                 "application/json": {
                     "example": {
                         "status": 200,
                         "code": "SUCCESS",
-                        "id_usuario": "01HXX...",
-                        "id_sesion_mesa": "01HYY...",
-                        "token_sesion": "01HZZ...",
+                        "id_usuario": "01HABC123456789DEFGHIJK",
+                        "id_sesion_mesa": "01HDEF123456789GHIJKLM",
+                        "token_sesion": "01HGHI123456789JKLMNOP",
                         "message": "Login exitoso",
-                        "fecha_expiracion": "2025-11-09T14:30:00"
+                        "fecha_expiracion": "2025-11-26T16:30:00"
                     }
                 }
             }
         },
         400: {
-            "description": "Error de validación (formato de email inválido)"
+            "description": "Error de validación de negocio",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Error al crear usuario con email 'test@correo.com'"
+                    }
+                }
+            }
         },
         404: {
             "description": "Mesa no encontrada o inactiva",
@@ -87,16 +188,16 @@ router = APIRouter(prefix="/login", tags=["Login"])
                 "application/json": {
                     "examples": {
                         "mesa_no_existe": {
-                            "summary": "Mesa no existe",
+                            "summary": "Mesa no existe en la base de datos",
                             "value": {
                                 "detail": {
-                                    "message": "No se encontró la mesa con ID '01HXX...'",
+                                    "message": "No se encontró la mesa con ID '01HXXX...'",
                                     "code": "MESA_NOT_FOUND"
                                 }
                             }
                         },
                         "mesa_inactiva": {
-                            "summary": "Mesa inactiva",
+                            "summary": "Mesa existe pero está desactivada",
                             "value": {
                                 "detail": {
                                     "message": "La mesa '5' no está activa",
@@ -108,8 +209,32 @@ router = APIRouter(prefix="/login", tags=["Login"])
                 }
             }
         },
+        422: {
+            "description": "Error de validación de datos de entrada (Pydantic)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {
+                                "type": "value_error",
+                                "loc": ["body", "email"],
+                                "msg": "Value error, El email debe contener 'correo', 'mail' o '@' en su formato",
+                                "input": "texto_invalido"
+                            }
+                        ]
+                    }
+                }
+            }
+        },
         500: {
-            "description": "Error interno del servidor"
+            "description": "Error interno del servidor",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Error interno del servidor: [descripción del error]"
+                    }
+                }
+            }
         }
     }
 )
