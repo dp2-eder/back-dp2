@@ -29,7 +29,6 @@ async def _initialize_database() -> None:
     import asyncio
     
     await create_tables()
-    await asyncio.sleep(0.5)  # Asegurar que las tablas estén completamente creadas
     logger.info("Tablas de base de datos inicializadas")
 
 
