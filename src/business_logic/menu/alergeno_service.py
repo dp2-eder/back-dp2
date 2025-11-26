@@ -55,7 +55,9 @@ class AlergenoService:
         Args:
             skip: Offset de paginación (por defecto 0)
             limit: Límite de registros (por defecto 100)
-            producto_id: Filtro opcional por producto
+            producto_id: ID del producto para filtrar alérgenos por asociación.
+                Si se proporciona, retorna solo los alérgenos asociados al producto.
+                La lógica de filtrado es delegada a la capa de repositorio.
             
         Returns:
             Lista paginada de alérgenos
