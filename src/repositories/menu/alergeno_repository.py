@@ -2,25 +2,20 @@
 Repositorio para la gestión de alérgenos en el sistema.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from src.repositories.base_repository import BaseRepository
 from src.models.menu.alergeno_model import AlergenoModel
+from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
 
-
-class AlergenoRepository:
+class AlergenoRepository(BaseRepository[AlergenoModel]):
     """Repositorio para gestionar operaciones CRUD del modelo de alérgenos.
 
     Proporciona acceso a la capa de persistencia para las operaciones
     relacionadas con los alérgenos en el sistema, siguiendo el patrón Repository.
-
-    Attributes
-    ----------
-    session : AsyncSession
-        Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
     """
 
     def __init__(self, session: AsyncSession):
@@ -32,11 +27,11 @@ class AlergenoRepository:
         session : AsyncSession
             Sesión asíncrona de SQLAlchemy para realizar operaciones en la base de datos.
         """
-        self.session = session
+        super().__init__(session, AlergenoModel)
 
     async def get_all(
-        self, skip: int = 0, limit: int = 100, producto_id: Optional[str] = None
-    ) -> List[AlergenoModel]:
+        self, skip: int = 0, limit: int = 100
+    ) -> Tuple[List[AlergenoModel], int]:
         """
         Obtiene una lista paginada de alérgenos y el total de registros.
 
@@ -46,28 +41,39 @@ class AlergenoRepository:
             Número de registros a omitir (offset), por defecto 0.
         limit : int, optional
             Número máximo de registros a retornar, por defecto 100.
-        producto_id : Optional[str], optional
-            ID del producto para filtrar alérgenos asociados, por defecto None.
 
         Returns
         -------
-        List[AlergenoModel]
-            Lista de instancias de AlergenoModel.
+        Tuple[List[AlergenoModel], int]
+            Tupla con la lista de alérgenos y el total de registros.
         """
-        query = select(AlergenoModel)
-        if producto_id:
-            from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
+        query = select(AlergenoModel).order_by(AlergenoModel.nombre)
+        return await self._fetch_paginated(query, skip, limit)
 
-            query = query.join(AlergenoModel.productos_alergenos).where(
-                ProductoAlergenoModel.id_producto == producto_id
-            )
+    async def get_by_producto(
+        self, producto_id: str, skip: int = 0, limit: int = 100
+    ) -> Tuple[List[AlergenoModel], int]:
+        """
+        Obtiene alérgenos asociados a un producto específico con paginación.
 
-        query = query.offset(skip).limit(limit)
+        Parameters
+        ----------
+        producto_id : str
+            ID del producto para filtrar alérgenos asociados.
+        skip : int, optional
+            Número de registros a omitir (offset), por defecto 0.
+        limit : int, optional
+            Número máximo de registros a retornar, por defecto 100.
 
-        try:
-            result = await self.session.execute(query)
-            alergenos = result.scalars().all()
-
-            return list(alergenos)
-        except SQLAlchemyError:
-            raise
+        Returns
+        -------
+        Tuple[List[AlergenoModel], int]
+            Tupla con la lista de alérgenos y el total de registros.
+        """
+        query = (
+            select(AlergenoModel)
+            .join(ProductoAlergenoModel, AlergenoModel.id == ProductoAlergenoModel.id_alergeno)
+            .where(ProductoAlergenoModel.id_producto == producto_id)
+            .order_by(AlergenoModel.nombre)
+        )
+        return await self._fetch_paginated(query, skip, limit)

@@ -152,7 +152,7 @@ async def test_create_categoria():
     assert result == categoria
     mock_session.add.assert_called_once_with(categoria)
     mock_session.flush.assert_called_once()
-    mock_session.commit.assert_called_once()
+    # mock_session.commit.assert_called_once()  # BaseRepository no hace commit
     mock_session.refresh.assert_called_once_with(categoria)
 
     # Arrange - Caso de error
@@ -200,7 +200,7 @@ async def test_delete_categoria():
     # Assert
     assert result is True
     mock_session.execute.assert_called_once()
-    mock_session.commit.assert_called_once()
+    # mock_session.commit.assert_called_once() # BaseRepository no hace commit
 
     # Arrange - Caso categoría no existe
     mock_session.reset_mock()
@@ -212,7 +212,7 @@ async def test_delete_categoria():
     # Assert
     assert result is False
     mock_session.execute.assert_called_once()
-    mock_session.commit.assert_called_once()
+    # mock_session.commit.assert_called_once() # BaseRepository no hace commit
 
     # Arrange - Caso de error
     mock_session.reset_mock()
@@ -247,10 +247,11 @@ async def test_update_categoria():
     # Arrange - Caso exitoso
     mock_session = AsyncMock(spec=AsyncSession)
     mock_result = MagicMock()
-    updated_categoria = CategoriaModel(
-        id=str(ULID()), nombre="Actualizado", descripcion="Nueva descripción"
+    existing_categoria = CategoriaModel(
+        id=str(ULID()), nombre="Original", descripcion="Original desc"
     )
-    mock_result.scalars.return_value.first.return_value = updated_categoria
+    # Mock get_by_id response
+    mock_result.scalars.return_value.first.return_value = existing_categoria
     mock_session.execute.return_value = mock_result
 
     categoria_id = str(ULID())
@@ -264,8 +265,10 @@ async def test_update_categoria():
     # Assert
     assert result is not None
     assert isinstance(result, CategoriaModel)
-    #mock_session.execute.assert_called_once()
-    #mock_session.commit.assert_called_once()
+    assert result.nombre == "Actualizado"
+    mock_session.execute.assert_called_once() # get_by_id call
+    mock_session.flush.assert_called_once()
+    mock_session.refresh.assert_called_once_with(existing_categoria)
 
     # Arrange - Caso categoría no existe
     mock_session.reset_mock()
@@ -285,6 +288,16 @@ async def test_update_categoria():
     with pytest.raises(SQLAlchemyError):
         await repository.update(categoria_id, nombre="Error")
 
+    # mock_session.rollback.assert_called_once() # get_by_id might not rollback on select error depending on impl, but BaseRepository.update catches and rolls back?
+    # BaseRepository.update calls get_by_id. If get_by_id raises, update propagates it.
+    # BaseRepository.get_by_id raises SQLAlchemyError directly.
+    # So update catches it? No, update calls get_by_id inside try block.
+    # If get_by_id raises, it goes to except block of update, which calls rollback.
+    # Wait, get_by_id in BaseRepository:
+    # try: execute... except: raise e
+    # update in BaseRepository:
+    # try: get_by_id... except: rollback; raise
+    # So yes, rollback should be called.
     mock_session.rollback.assert_called_once()
 
 
@@ -318,7 +331,8 @@ async def test_get_all():
     mock_result.scalars.return_value.all.return_value = categorias
     mock_count_result.scalar.return_value = 2
     
-    mock_session.execute.side_effect = [mock_result, mock_count_result]
+    # BaseRepository._fetch_paginated executes count query FIRST, then data query
+    mock_session.execute.side_effect = [mock_count_result, mock_result]
 
     repository = CategoriaRepository(mock_session)
 
