@@ -20,7 +20,8 @@ from src.api.schemas.producto_schema import (
     ProductoCardList,
     ProductoConOpcionesResponse,
     TipoOpcionConOpcionesSchema,
-    ProductoOpcionDetalleSchema
+    ProductoOpcionDetalleSchema,
+    ProductoCompletoUpdateSchema
 )
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
@@ -54,6 +55,12 @@ class ProductoService:
         self.repository = ProductoRepository(session)
         self.mesa_repository = MesaRepository(session)
         self.locales_productos_repository = LocalesProductosRepository(session)
+
+        # Repositorios adicionales para actualización completa
+        from src.repositories.menu.producto_alergeno_repository import ProductoAlergenoRepository
+        from src.repositories.pedidos.producto_opcion_repository import ProductoOpcionRepository
+        self.producto_alergeno_repository = ProductoAlergenoRepository(session)
+        self.producto_opcion_repository = ProductoOpcionRepository(session)
 
     async def create_producto(self, producto_data: ProductoCreate) -> ProductoResponse:
         """
@@ -595,3 +602,270 @@ class ProductoService:
 
         # Retornar esquema de lista
         return ProductoCardList(items=producto_cards, total=total)
+
+    async def _update_producto_alergenos(
+        self,
+        producto_id: str,
+        alergenos_data: List
+    ) -> None:
+        """
+        Actualiza los alérgenos de un producto usando soft delete.
+
+        Estrategia:
+        1. Obtener alérgenos actuales (incluyendo inactivos)
+        2. Desactivar los que NO estén en la nueva lista
+        3. Reactivar/actualizar los que SÍ estén en la nueva lista
+        4. Crear nuevos que no existían
+
+        Parameters
+        ----------
+        producto_id : str
+            ID del producto.
+        alergenos_data : List[ProductoAlergenoUpdateInput]
+            Lista de alérgenos con nivel_presencia y notas.
+        """
+        # Obtener IDs de alérgenos de la request
+        alergenos_ids_nuevos = {a.id_alergeno for a in alergenos_data}
+
+        # Obtener relaciones actuales (incluyendo inactivos para poder reactivar)
+        relaciones_actuales = await self.producto_alergeno_repository.get_by_producto(
+            producto_id,
+            solo_activos=False  # Obtener TODOS
+        )
+
+        # Desactivar alérgenos que ya no están en la lista
+        for relacion in relaciones_actuales:
+            if relacion.id_alergeno not in alergenos_ids_nuevos:
+                # Desactivar si no está en la nueva lista
+                await self.producto_alergeno_repository.update(
+                    relacion.id,
+                    activo=False
+                )
+
+        # Actualizar o crear alérgenos de la nueva lista
+        for alergeno_input in alergenos_data:
+            # Buscar si ya existe la relación (activa o inactiva)
+            relacion_existente = next(
+                (r for r in relaciones_actuales
+                 if r.id_alergeno == alergeno_input.id_alergeno),
+                None
+            )
+
+            if relacion_existente:
+                # Actualizar y reactivar si estaba inactiva
+                await self.producto_alergeno_repository.update(
+                    relacion_existente.id,
+                    nivel_presencia=alergeno_input.nivel_presencia,
+                    notas=alergeno_input.notas,
+                    activo=True  # Reactivar
+                )
+            else:
+                # Crear nueva relación
+                from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
+                nueva_relacion = ProductoAlergenoModel(
+                    id_producto=producto_id,
+                    id_alergeno=alergeno_input.id_alergeno,
+                    nivel_presencia=alergeno_input.nivel_presencia,
+                    notas=alergeno_input.notas,
+                    activo=True
+                )
+                await self.producto_alergeno_repository.create(nueva_relacion)
+
+    async def _update_producto_opciones(
+        self,
+        producto_id: str,
+        tipos_opciones_data: List
+    ) -> None:
+        """
+        Actualiza las opciones de un producto usando soft delete.
+
+        Estrategia:
+        1. Obtener opciones actuales del producto
+        2. Para cada tipo de opción en la request:
+           - Desactivar opciones del tipo que no estén en la lista
+           - Actualizar opciones existentes (con ID)
+           - Crear opciones nuevas (sin ID o ID=None)
+
+        Parameters
+        ----------
+        producto_id : str
+            ID del producto.
+        tipos_opciones_data : List[TipoOpcionCompletoSchema]
+            Lista de tipos de opciones con sus opciones.
+        """
+        # Obtener opciones actuales (incluyendo inactivas)
+        opciones_actuales = await self.producto_opcion_repository.get_by_producto(
+            producto_id,
+            solo_activos=False
+        )
+
+        # Procesar cada tipo de opción
+        for tipo_opciones in tipos_opciones_data:
+            id_tipo_opcion = tipo_opciones.id_tipo_opcion
+
+            # IDs de opciones que vienen en la request para este tipo
+            opciones_ids_nuevos = {
+                o.id_opcion for o in tipo_opciones.opciones
+                if o.id_opcion is not None
+            }
+
+            # Desactivar opciones de este tipo que NO están en la nueva lista
+            for opcion_actual in opciones_actuales:
+                if (opcion_actual.id_tipo_opcion == id_tipo_opcion and
+                    opcion_actual.id not in opciones_ids_nuevos):
+                    await self.producto_opcion_repository.update(
+                        opcion_actual.id,
+                        activo=False
+                    )
+
+            # Crear o actualizar opciones
+            for opcion_data in tipo_opciones.opciones:
+                if opcion_data.id_opcion:
+                    # Actualizar opción existente y reactivar
+                    await self.producto_opcion_repository.update(
+                        opcion_data.id_opcion,
+                        nombre=opcion_data.nombre,
+                        precio_adicional=opcion_data.precio_adicional,
+                        activo=opcion_data.activo,  # Respetar el activo del input
+                        orden=opcion_data.orden
+                    )
+                else:
+                    # Crear nueva opción
+                    from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
+                    nueva_opcion = ProductoOpcionModel(
+                        id_producto=producto_id,
+                        id_tipo_opcion=id_tipo_opcion,
+                        nombre=opcion_data.nombre,
+                        precio_adicional=opcion_data.precio_adicional,
+                        activo=opcion_data.activo,
+                        orden=opcion_data.orden
+                    )
+                    await self.producto_opcion_repository.create(nueva_opcion)
+
+    async def update_producto_completo(
+        self, producto_id: str, producto_data: ProductoCompletoUpdateSchema
+    ) -> ProductoConOpcionesResponse:
+        """
+        Actualiza completamente un producto con todos sus datos relacionados.
+        
+        Actualiza el producto base, sus alérgenos, secciones, tipos de opciones y opciones.
+        Reemplaza completamente las relaciones existentes.
+
+        Parameters
+        ----------
+        producto_id : str
+            Identificador único del producto a actualizar.
+        producto_data : ProductoCompletoUpdateSchema
+            Esquema con todos los datos del producto a actualizar.
+
+        Returns
+        -------
+        ProductoConOpcionesResponse
+            Esquema de respuesta con el producto actualizado y todas sus relaciones.
+
+        Raises
+        ------
+        ProductoNotFoundError
+            Si no se encuentra el producto con el ID especificado.
+        ProductoConflictError
+            Si hay conflictos de integridad (ej. nombre duplicado).
+        ProductoValidationError
+            Si los datos de entrada son inválidos.
+        """
+        try:
+            # Verificar que el producto existe
+            producto = await self.repository.get_by_id(producto_id)
+            if not producto:
+                raise ProductoNotFoundError(f"No se encontró el producto con ID {producto_id}")
+
+            # Actualizar datos básicos del producto
+            update_data = {
+                "nombre": producto_data.nombre,
+                "descripcion": producto_data.descripcion,
+                "precio_base": producto_data.precio_base,
+                "imagen_path": producto_data.imagen_path,
+                "imagen_alt_text": producto_data.imagen_alt_text,
+                "id_categoria": producto_data.id_categoria,
+                "disponible": producto_data.disponible,
+                "destacado": producto_data.destacado,
+            }
+
+            # Actualizar el producto base usando **kwargs
+            updated_producto = await self.repository.update(producto_id, **update_data)
+
+            # Actualizar alérgenos del producto
+            await self._update_producto_alergenos(producto_id, producto_data.alergenos)
+
+            # Actualizar opciones del producto
+            await self._update_producto_opciones(producto_id, producto_data.tipos_opciones)
+
+            # NOTA: Secciones las dejamos para después si es necesario
+            # await self._update_producto_secciones(producto_id, producto_data.secciones)
+
+            # Obtener el producto actualizado con todas sus relaciones
+            producto_completo = await self.repository.get_by_id_with_opciones(producto_id)
+            if not producto_completo:
+                raise ProductoNotFoundError(f"Error al obtener el producto actualizado con ID {producto_id}")
+
+            # Normalizar nombres antes de retornar
+            producto_completo.nombre = normalize_product_name(producto_completo.nombre)
+            
+            # Transformar y estructurar los datos de opciones por tipo
+            tipos_opciones_response = []
+            if hasattr(producto_completo, 'opciones') and producto_completo.opciones:
+                # Agrupar opciones por tipo
+                tipos_dict = {}
+                for opcion in producto_completo.opciones:
+                    tipo_id = opcion.tipo_opcion.id
+                    if tipo_id not in tipos_dict:
+                        tipos_dict[tipo_id] = {
+                            "id_tipo_opcion": opcion.tipo_opcion.id,
+                            "nombre_tipo": opcion.tipo_opcion.nombre,
+                            "descripcion_tipo": opcion.tipo_opcion.descripcion,
+                            "seleccion_minima": opcion.tipo_opcion.seleccion_minima,
+                            "seleccion_maxima": opcion.tipo_opcion.seleccion_maxima,
+                            "orden_tipo": opcion.tipo_opcion.orden,
+                            "opciones": []
+                        }
+                    
+                    tipos_dict[tipo_id]["opciones"].append(
+                        ProductoOpcionDetalleSchema.model_validate(opcion)
+                    )
+                
+                # Convertir el diccionario a lista ordenada por orden_tipo
+                tipos_opciones_response = [
+                    TipoOpcionConOpcionesSchema.model_validate(tipo_data)
+                    for tipo_data in sorted(tipos_dict.values(), key=lambda x: x["orden_tipo"])
+                ]
+
+            # Construir respuesta con estructura completa
+            response_data = {
+                "id": producto_completo.id,
+                "nombre": producto_completo.nombre,
+                "descripcion": producto_completo.descripcion,
+                "precio_base": producto_completo.precio_base,
+                "imagen_path": producto_completo.imagen_path,
+                "imagen_alt_text": producto_completo.imagen_alt_text,
+                "id_categoria": producto_completo.id_categoria,
+                "disponible": producto_completo.disponible,
+                "destacado": producto_completo.destacado,
+                "alergenos": producto_completo.alergenos if hasattr(producto_completo, 'alergenos') else [],
+                "fecha_creacion": producto_completo.fecha_creacion,
+                "fecha_modificacion": producto_completo.fecha_modificacion,
+                "tipos_opciones": tipos_opciones_response
+            }
+            
+            return ProductoConOpcionesResponse.model_validate(response_data)
+
+        except IntegrityError as e:
+            # Capturar errores de integridad
+            if "nombre" in str(e):
+                raise ProductoConflictError(
+                    f"Ya existe un producto con el nombre '{producto_data.nombre}'"
+                )
+            raise ProductoValidationError(f"Error de integridad en los datos: {str(e)}")
+        except Exception as e:
+            # Capturar otros errores y convertir a excepción de validación
+            if isinstance(e, (ProductoNotFoundError, ProductoConflictError, ProductoValidationError)):
+                raise
+            raise ProductoValidationError(f"Error al actualizar el producto: {str(e)}")

@@ -201,3 +201,67 @@ class ProductoOpcionRepository:
             # En caso de error, no es necesario hacer rollback aquí
             # porque no estamos modificando datos
             raise
+
+    async def get_by_producto(
+        self,
+        id_producto: str,
+        solo_activos: bool = True
+    ) -> List[ProductoOpcionModel]:
+        """
+        Obtiene todas las opciones de un producto específico.
+
+        Parameters
+        ----------
+        id_producto : str
+            Identificador único del producto.
+        solo_activos : bool, optional
+            Si True, solo retorna opciones activas. Por defecto True.
+
+        Returns
+        -------
+        List[ProductoOpcionModel]
+            Lista de opciones del producto.
+        """
+        query = select(ProductoOpcionModel).where(
+            ProductoOpcionModel.id_producto == id_producto
+        )
+
+        if solo_activos:
+            query = query.where(ProductoOpcionModel.activo == True)
+
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def get_by_producto_and_tipo(
+        self,
+        id_producto: str,
+        id_tipo_opcion: str,
+        solo_activos: bool = True
+    ) -> List[ProductoOpcionModel]:
+        """
+        Obtiene opciones de un producto filtradas por tipo.
+
+        Parameters
+        ----------
+        id_producto : str
+            Identificador único del producto.
+        id_tipo_opcion : str
+            Identificador del tipo de opción.
+        solo_activos : bool, optional
+            Si True, solo retorna opciones activas. Por defecto True.
+
+        Returns
+        -------
+        List[ProductoOpcionModel]
+            Lista de opciones del producto para ese tipo.
+        """
+        query = select(ProductoOpcionModel).where(
+            ProductoOpcionModel.id_producto == id_producto,
+            ProductoOpcionModel.id_tipo_opcion == id_tipo_opcion
+        )
+
+        if solo_activos:
+            query = query.where(ProductoOpcionModel.activo == True)
+
+        result = await self.session.execute(query)
+        return list(result.scalars().all())

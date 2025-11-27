@@ -344,7 +344,11 @@ class ProductoAlergenoRepository:
             # porque no estamos modificando datos
             raise
 
-    async def get_by_producto(self, id_producto: str) -> List[ProductoAlergenoModel]:
+    async def get_by_producto(
+        self,
+        id_producto: str,
+        solo_activos: bool = True
+    ) -> List[ProductoAlergenoModel]:
         """
         Obtiene todos los alérgenos asociados a un producto específico.
 
@@ -352,6 +356,8 @@ class ProductoAlergenoRepository:
         ----------
         id_producto : str
             Identificador único del producto.
+        solo_activos : bool, optional
+            Si True, solo retorna relaciones activas. Por defecto True.
 
         Returns
         -------
@@ -361,6 +367,44 @@ class ProductoAlergenoRepository:
         query = select(ProductoAlergenoModel).where(
             ProductoAlergenoModel.id_producto == id_producto
         )
+
+        if solo_activos:
+            query = query.where(ProductoAlergenoModel.activo == True)
+
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def get_alergenos_by_producto(
+        self,
+        id_producto: str,
+        solo_activos: bool = True
+    ) -> List:
+        """
+        Obtiene todos los alérgenos asociados a un producto específico con JOIN.
+
+        Parameters
+        ----------
+        id_producto : str
+            Identificador único del producto (ULID).
+        solo_activos : bool, optional
+            Si True, solo retorna alérgenos activos. Por defecto True.
+
+        Returns
+        -------
+        List[AlergenoModel]
+            Lista directa de alérgenos asociados al producto.
+        """
+        from src.models.menu.alergeno_model import AlergenoModel
+
+        query = (
+            select(AlergenoModel)
+            .join(ProductoAlergenoModel, AlergenoModel.id == ProductoAlergenoModel.id_alergeno)
+            .where(ProductoAlergenoModel.id_producto == id_producto)
+        )
+
+        if solo_activos:
+            query = query.where(ProductoAlergenoModel.activo == True)
+
         result = await self.session.execute(query)
         return list(result.scalars().all())
 

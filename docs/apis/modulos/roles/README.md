@@ -29,6 +29,9 @@ Gestión completa de roles de usuario en el sistema. Permite crear, listar, cons
 ### Eliminar Rol
 - **[DELETE /roles/{rol_id}](endpoints/DELETE_roles_rol_id.md)** — Elimina un rol del sistema
 
+### Obtener Nombre del Rol de un Usuario
+- **[GET /roles/usuario/{usuario_id}/nombre](endpoints/GET_roles_usuario_usuario_id_nombre.md)** — Obtiene únicamente el nombre del rol asignado a un usuario específico
+
 ## Schema Principal
 
 **RolResponse:**

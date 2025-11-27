@@ -16,7 +16,12 @@ from src.business_logic.exceptions.producto_exceptions import (
     ProductoConflictError,
     ProductoValidationError,
 )
-from src.api.schemas.producto_schema import ProductoResponse, ProductoList
+from src.api.schemas.producto_schema import (
+    ProductoResponse, 
+    ProductoList,
+    ProductoConOpcionesResponse,
+    ProductoCompletoUpdateSchema
+)
 
 app = FastAPI()
 app.include_router(router, prefix="/api/v1")
@@ -576,3 +581,332 @@ def test_delete_producto_not_found(
     assert response.status_code == 404
     assert f"No se encontró el producto con ID {sample_producto_id}" in response.json()["detail"]
     mock_producto_service.delete_producto.assert_awaited_once()
+
+
+@pytest.fixture
+def sample_producto_completo_data():
+    """
+    Fixture que proporciona datos de muestra para actualización masiva de producto.
+
+    PRECONDICIONES:
+        - La biblioteca ULID debe estar importada correctamente
+
+    PROCESO:
+        - Crea un diccionario con datos completos de un producto
+        - Incluye datos básicos, alérgenos, secciones y tipos de opciones
+        - Los valores Decimal se convierten a string para serialización JSON
+
+    POSTCONDICIONES:
+        - Devuelve un diccionario válido para ProductoCompletoUpdateSchema
+        - Los datos pueden ser usados para crear objetos de actualización masiva
+    """
+    return {
+        "nombre": "Pizza Margherita Completa",
+        "descripcion": "Pizza clásica con ingredientes frescos",
+        "precio_base": "15.50",
+        "imagen_path": "/images/pizza-margherita.jpg",
+        "imagen_alt_text": "Pizza Margherita con tomate y mozzarella",
+        "id_categoria": str(ULID()),
+        "disponible": True,
+        "destacado": False,
+        "alergenos": [
+            {
+                "id_alergeno": str(ULID()),
+                "nivel_presencia": "contiene",
+                "notas": "Alérgeno de prueba 1"
+            },
+            {
+                "id_alergeno": str(ULID()),
+                "nivel_presencia": "contiene",
+                "notas": "Alérgeno de prueba 2"
+            }
+        ],
+        "secciones": [{"id_seccion": str(ULID())}, {"id_seccion": str(ULID())}],
+        "tipos_opciones": [
+            {
+                "id_tipo_opcion": str(ULID()),
+                "nombre": "Tamaño",
+                "descripcion": "Seleccione el tamaño de la pizza",
+                "seleccion_minima": 1,
+                "seleccion_maxima": 1,
+                "orden": 0,
+                "opciones": [
+                    {
+                        "id_opcion": str(ULID()),
+                        "nombre": "Pequeña",
+                        "precio_adicional": "0.00",
+                        "activo": True,
+                        "orden": 0
+                    },
+                    {
+                        "id_opcion": str(ULID()),
+                        "nombre": "Grande",
+                        "precio_adicional": "5.00",
+                        "activo": True,
+                        "orden": 1
+                    }
+                ]
+            }
+        ]
+    }
+
+
+@pytest.fixture
+def sample_producto_completo_response():
+    """
+    Fixture que proporciona respuesta de muestra para actualización masiva de producto.
+
+    PRECONDICIONES:
+        - La biblioteca ULID debe estar importada correctamente
+
+    PROCESO:
+        - Crea un diccionario con respuesta completa de un producto actualizado
+        - Incluye datos básicos, alérgenos y tipos de opciones con estructura completa
+
+    POSTCONDICIONES:
+        - Devuelve un diccionario válido para ProductoConOpcionesResponse
+        - Los datos simulan una respuesta exitosa del servicio
+    """
+    return {
+        "id": str(ULID()),
+        "nombre": "Pizza Margherita Completa",
+        "descripcion": "Pizza clásica con ingredientes frescos",
+        "precio_base": "15.50",
+        "imagen_path": "/images/pizza-margherita.jpg",
+        "imagen_alt_text": "Pizza Margherita con tomate y mozzarella",
+        "id_categoria": str(ULID()),
+        "disponible": True,
+        "destacado": False,
+        "alergenos": [
+            {"id": str(ULID()), "nombre": "Gluten", "icono": "gluten.png", "nivel_riesgo": "alto"},
+            {"id": str(ULID()), "nombre": "Lactosa", "icono": "lactosa.png", "nivel_riesgo": "medio"}
+        ],
+        "fecha_creacion": "2025-10-26T12:00:00",
+        "fecha_modificacion": "2025-10-26T12:30:00",
+        "tipos_opciones": [
+            {
+                "id_tipo_opcion": str(ULID()),
+                "nombre_tipo": "Tamaño",
+                "descripcion_tipo": "Seleccione el tamaño de la pizza",
+                "seleccion_minima": 1,
+                "seleccion_maxima": 1,
+                "orden_tipo": 0,
+                "opciones": [
+                    {
+                        "id": str(ULID()),
+                        "nombre": "Pequeña",
+                        "precio_adicional": "0.00",
+                        "activo": True,
+                        "orden": 0,
+                        "fecha_creacion": "2025-10-26T12:00:00",
+                        "fecha_modificacion": "2025-10-26T12:00:00"
+                    },
+                    {
+                        "id": str(ULID()),
+                        "nombre": "Grande",
+                        "precio_adicional": "5.00",
+                        "activo": True,
+                        "orden": 1,
+                        "fecha_creacion": "2025-10-26T12:00:00",
+                        "fecha_modificacion": "2025-10-26T12:00:00"
+                    }
+                ]
+            }
+        ]
+    }
+
+
+def test_update_producto_completo_success(
+    test_client, mock_db_session_dependency, mock_producto_service, 
+    sample_producto_id, sample_producto_completo_data, sample_producto_completo_response
+):
+    """
+    Prueba la actualización exitosa de un producto completo.
+
+    PRECONDICIONES:
+        - El cliente de prueba (test_client) debe estar configurado
+        - El servicio de productos debe estar mockeado (mock_producto_service)
+        - Se deben tener datos válidos de actualización masiva
+
+    PROCESO:
+        - Configura el mock para simular actualización exitosa.
+        - Realiza una solicitud PUT al endpoint con datos completos.
+        - Verifica la respuesta HTTP y los datos retornados.
+
+    POSTCONDICIONES:
+        - La respuesta debe tener código HTTP 200 (OK)
+        - Los datos devueltos deben coincidir con los esperados
+        - El método update_producto_completo del servicio debe haber sido llamado una vez
+    """
+    # Arrange
+    expected_response = ProductoConOpcionesResponse.model_validate(sample_producto_completo_response)
+    mock_producto_service.update_producto_completo.return_value = expected_response
+
+    # Act
+    response = test_client.put(
+        f"/api/v1/productos/{sample_producto_id}/completo",
+        json=sample_producto_completo_data
+    )
+
+    # Assert
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["nombre"] == sample_producto_completo_data["nombre"]
+    assert response_data["descripcion"] == sample_producto_completo_data["descripcion"]
+    assert response_data["precio_base"] == sample_producto_completo_data["precio_base"]
+    assert response_data["disponible"] == sample_producto_completo_data["disponible"]
+    mock_producto_service.update_producto_completo.assert_awaited_once()
+
+
+def test_update_producto_completo_not_found(
+    test_client, mock_db_session_dependency, mock_producto_service, 
+    sample_producto_id, sample_producto_completo_data
+):
+    """
+    Prueba el manejo de errores al actualizar un producto que no existe.
+
+    PRECONDICIONES:
+        - El cliente de prueba (test_client) debe estar configurado
+        - El servicio de productos debe estar mockeado (mock_producto_service)
+        - Se deben tener datos válidos de actualización
+
+    PROCESO:
+        - Configura el mock para simular que el producto no existe.
+        - Realiza una solicitud PUT al endpoint.
+        - Verifica que se retorne el código de error apropiado.
+
+    POSTCONDICIONES:
+        - La respuesta debe tener código HTTP 404 (Not Found)
+        - El mensaje de error debe indicar que no se encontró el producto
+        - El método update_producto_completo del servicio debe haber sido llamado una vez
+    """
+    # Arrange
+    mock_producto_service.update_producto_completo.side_effect = ProductoNotFoundError(
+        f"No se encontró el producto con ID {sample_producto_id}"
+    )
+
+    # Act
+    response = test_client.put(
+        f"/api/v1/productos/{sample_producto_id}/completo",
+        json=sample_producto_completo_data
+    )
+
+    # Assert
+    assert response.status_code == 404
+    assert f"No se encontró el producto con ID {sample_producto_id}" in response.json()["detail"]
+    mock_producto_service.update_producto_completo.assert_awaited_once()
+
+
+def test_update_producto_completo_conflict(
+    test_client, mock_db_session_dependency, mock_producto_service, 
+    sample_producto_id, sample_producto_completo_data
+):
+    """
+    Prueba el manejo de errores de conflicto al actualizar un producto.
+
+    PRECONDICIONES:
+        - El cliente de prueba (test_client) debe estar configurado
+        - El servicio de productos debe estar mockeado (mock_producto_service)
+        - Se deben tener datos válidos de actualización
+
+    PROCESO:
+        - Configura el mock para simular un conflicto (ej. nombre duplicado).
+        - Realiza una solicitud PUT al endpoint.
+        - Verifica que se retorne el código de error apropiado.
+
+    POSTCONDICIONES:
+        - La respuesta debe tener código HTTP 409 (Conflict)
+        - El mensaje de error debe indicar el conflicto
+        - El método update_producto_completo del servicio debe haber sido llamado una vez
+    """
+    # Arrange
+    mock_producto_service.update_producto_completo.side_effect = ProductoConflictError(
+        f"Ya existe un producto con el nombre '{sample_producto_completo_data['nombre']}'"
+    )
+
+    # Act
+    response = test_client.put(
+        f"/api/v1/productos/{sample_producto_id}/completo",
+        json=sample_producto_completo_data
+    )
+
+    # Assert
+    assert response.status_code == 409
+    assert "Ya existe un producto con el nombre" in response.json()["detail"]
+    mock_producto_service.update_producto_completo.assert_awaited_once()
+
+
+def test_update_producto_completo_validation_error(
+    test_client, mock_db_session_dependency, mock_producto_service, 
+    sample_producto_id, sample_producto_completo_data
+):
+    """
+    Prueba el manejo de errores de validación al actualizar un producto.
+
+    PRECONDICIONES:
+        - El cliente de prueba (test_client) debe estar configurado
+        - El servicio de productos debe estar mockeado (mock_producto_service)
+        - Se deben tener datos válidos de actualización
+
+    PROCESO:
+        - Configura el mock para simular un error de validación.
+        - Realiza una solicitud PUT al endpoint.
+        - Verifica que se retorne el código de error apropiado.
+
+    POSTCONDICIONES:
+        - La respuesta debe tener código HTTP 400 (Bad Request)
+        - El mensaje de error debe indicar el problema de validación
+        - El método update_producto_completo del servicio debe haber sido llamado una vez
+    """
+    # Arrange
+    mock_producto_service.update_producto_completo.side_effect = ProductoValidationError(
+        "Los datos de entrada son inválidos"
+    )
+
+    # Act
+    response = test_client.put(
+        f"/api/v1/productos/{sample_producto_id}/completo",
+        json=sample_producto_completo_data
+    )
+
+    # Assert
+    assert response.status_code == 400
+    assert "Los datos de entrada son inválidos" in response.json()["detail"]
+    mock_producto_service.update_producto_completo.assert_awaited_once()
+
+
+def test_update_producto_completo_internal_error(
+    test_client, mock_db_session_dependency, mock_producto_service, 
+    sample_producto_id, sample_producto_completo_data
+):
+    """
+    Prueba el manejo de errores internos del servidor.
+
+    PRECONDICIONES:
+        - El cliente de prueba (test_client) debe estar configurado
+        - El servicio de productos debe estar mockeado (mock_producto_service)
+        - Se deben tener datos válidos de actualización
+
+    PROCESO:
+        - Configura el mock para simular un error interno.
+        - Realiza una solicitud PUT al endpoint.
+        - Verifica que se retorne el código de error apropiado.
+
+    POSTCONDICIONES:
+        - La respuesta debe tener código HTTP 500 (Internal Server Error)
+        - El mensaje de error debe indicar error interno del servidor
+        - El método update_producto_completo del servicio debe haber sido llamado una vez
+    """
+    # Arrange
+    mock_producto_service.update_producto_completo.side_effect = Exception("Error de base de datos")
+
+    # Act
+    response = test_client.put(
+        f"/api/v1/productos/{sample_producto_id}/completo",
+        json=sample_producto_completo_data
+    )
+
+    # Assert
+    assert response.status_code == 500
+    assert "Error interno del servidor" in response.json()["detail"]
+    mock_producto_service.update_producto_completo.assert_awaited_once()

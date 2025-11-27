@@ -440,30 +440,38 @@ async def delete_pedido(
     "/enviar",
     response_model=PedidoEnviarResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Crear pedido con token de sesión",
+    summary="Crear pedido con token de sesión (Entrega de pedidos)",
     description="Crea un pedido usando el token de sesión de mesa compartida. "
-    "Los precios se obtienen automáticamente de la base de datos para mayor seguridad.",
+    "Los precios se obtienen automáticamente de la base de datos para mayor seguridad. "
+    "El body solo debe contener IDs; no se debe enviar ni procesar ningún campo de precio.",
 )
 async def enviar_pedido_por_token(
     pedido_data: PedidoEnviarRequest,
     session: AsyncSession = Depends(get_database_session),
 ) -> PedidoEnviarResponse:
     """
-    Crea un pedido usando el token de sesión de mesa compartida.
+    Crea un pedido usando el token de sesión de mesa compartida (Entrega de pedidos).
 
     Este endpoint permite crear pedidos en sesiones compartidas donde múltiples
     usuarios pueden ordenar usando el mismo token. Los precios se calculan
     automáticamente desde la base de datos, evitando manipulación desde el frontend.
 
+    **IMPORTANTE:**
+    - El body solo debe contener IDs (id_producto, id_producto_opcion)
+    - NO se debe enviar ningún campo de precio (precio_unitario, precio_adicional, etc.)
+    - Si se envía un campo de precio, la solicitud será rechazada automáticamente
+    - Todos los precios se obtienen de la base de datos
+
     **Características:**
     - Valida que la sesión existe y está activa
     - Obtiene precios desde la BD (no se envían desde frontend)
+    - Rechaza explícitamente cualquier campo de precio enviado por el cliente
     - Asocia el pedido a la sesión compartida
     - Utiliza campos notas_cliente y notas_cocina
     - Crea pedido con id_sesion_mesa, id_mesa e id_usuario
 
     Args:
-        pedido_data: Datos del pedido con token de sesión e items (sin precios).
+        pedido_data: Datos del pedido con token de sesión e items (solo IDs, sin precios).
         session: Sesión de base de datos.
 
     Returns:
@@ -471,8 +479,8 @@ async def enviar_pedido_por_token(
 
     Raises:
         HTTPException:
-            - 400: Si el token no existe, la sesión no está activa, o algún
-                   producto no existe o no está disponible.
+            - 400: Si el token no existe, la sesión no está activa, algún
+                   producto no existe o no está disponible, o se envió un campo de precio.
             - 409: Si hay un conflicto de integridad en la base de datos.
             - 500: Si ocurre un error interno del servidor.
 
@@ -494,6 +502,9 @@ async def enviar_pedido_por_token(
             "notas_cocina": "Urgente"
         }
         ```
+        
+        **NOTA:** No incluir campos como `precio_unitario` o `precio_adicional`.
+        Estos serán rechazados automáticamente.
     """
     try:
         pedido_service = PedidoService(session)

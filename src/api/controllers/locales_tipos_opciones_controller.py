@@ -2,7 +2,7 @@
 Endpoints para gestión de relaciones Local-TipoOpcion.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
@@ -38,7 +38,7 @@ router = APIRouter(
 )
 async def create_relacion(
     id_local: str = Path(..., description="ID del local"),
-    relacion_data: LocalesTiposOpcionesCreate = ...,
+    relacion_data: LocalesTiposOpcionesCreate = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesTiposOpcionesResponse:
     """
@@ -175,7 +175,7 @@ async def get_relacion(
 async def update_relacion(
     id_local: str = Path(..., description="ID del local"),
     relacion_id: str = Path(..., description="ID de la relación"),
-    relacion_data: LocalesTiposOpcionesUpdate = ...,
+    relacion_data: LocalesTiposOpcionesUpdate = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesTiposOpcionesResponse:
     """
@@ -255,7 +255,7 @@ async def delete_relacion(
 )
 async def activar_tipo_opcion(
     id_local: str = Path(..., description="ID del local"),
-    request: ActivarTipoOpcionRequest = ...,
+    request: ActivarTipoOpcionRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesTiposOpcionesResponse:
     """
@@ -297,7 +297,7 @@ async def activar_tipo_opcion(
 )
 async def desactivar_tipo_opcion(
     id_local: str = Path(..., description="ID del local"),
-    request: DesactivarTipoOpcionRequest = ...,
+    request: DesactivarTipoOpcionRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> LocalesTiposOpcionesResponse:
     """
@@ -337,7 +337,7 @@ async def desactivar_tipo_opcion(
 )
 async def activar_tipos_opciones_lote(
     id_local: str = Path(..., description="ID del local"),
-    request: ActivarTiposOpcionesLoteRequest = ...,
+    request: ActivarTiposOpcionesLoteRequest = Body(...),
     session: AsyncSession = Depends(get_database_session),
 ) -> OperacionLoteResponse:
     """

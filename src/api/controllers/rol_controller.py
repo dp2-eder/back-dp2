@@ -97,6 +97,43 @@ async def get_rol(
 
 
 @router.get(
+    "/usuario/{usuario_id}/nombre",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener nombre del rol de un usuario",
+    description="Obtiene el nombre del rol asignado a un usuario específico por su ID.",
+)
+async def get_nombre_rol_usuario(
+    usuario_id: str, session: AsyncSession = Depends(get_database_session)
+) -> dict:
+    """
+    Obtiene el nombre del rol de un usuario específico.
+
+    Args:
+        usuario_id: ID del usuario para obtener su rol.
+        session: Sesión de base de datos.
+
+    Returns:
+        Diccionario con el nombre del rol: {"nombre_rol": "COMENSAL"}
+
+    Raises:
+        HTTPException:
+            - 404: Si no se encuentra el usuario, no tiene rol asignado, o el rol no existe.
+            - 500: Si ocurre un error interno del servidor.
+    """
+    try:
+        rol_service = RolService(session)
+        return await rol_service.get_nombre_rol_by_usuario_id(usuario_id)
+    except RolNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+
+@router.get(
     "",
     response_model=RolList,
     status_code=status.HTTP_200_OK,

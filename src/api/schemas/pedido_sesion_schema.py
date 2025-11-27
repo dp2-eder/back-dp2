@@ -6,7 +6,7 @@ compartido de una mesa, sin necesidad de enviar precios desde el frontend.
 Los precios se obtienen automáticamente desde la base de datos.
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
@@ -19,7 +19,10 @@ class OpcionProductoSesion(BaseModel):
     Opción seleccionada para un producto (solo ID).
 
     El precio adicional se obtiene automáticamente desde la BD.
+    NO se debe enviar ningún campo de precio desde el cliente.
     """
+
+    model_config = ConfigDict(extra='forbid')
 
     id_producto_opcion: str = Field(
         description="ID de la opción seleccionada (ULID)",
@@ -41,7 +44,10 @@ class PedidoItemSesion(BaseModel):
     Item de pedido para envío con token de sesión.
 
     Solo incluye IDs y cantidades. Los precios se calculan desde la BD.
+    NO se debe enviar ningún campo de precio desde el cliente.
     """
+
+    model_config = ConfigDict(extra='forbid')
 
     id_producto: str = Field(
         description="ID del producto (ULID)",
@@ -89,19 +95,23 @@ class PedidoEnviarRequest(BaseModel):
     Schema para crear un pedido con token de sesión.
 
     El sistema calculará automáticamente los precios desde la BD.
-    No se requiere enviar precios desde el frontend.
+    NO se debe enviar ningún campo de precio desde el frontend.
+    Si se envía un campo de precio, la solicitud será rechazada.
 
     Attributes
     ----------
     token_sesion : str
         Token de sesión de mesa compartido (ULID de 26 caracteres)
     items : List[PedidoItemSesion]
-        Lista de productos a pedir (mínimo 1)
+        Lista de productos a pedir (mínimo 1). Cada item solo debe contener
+        el ID del producto, cantidad, opciones (solo IDs) y notas.
     notas_cliente : Optional[str]
         Notas del cliente (alergias, preferencias especiales)
     notas_cocina : Optional[str]
         Instrucciones para la cocina (urgente, sin sal, etc.)
     """
+
+    model_config = ConfigDict(extra='forbid')
 
     token_sesion: str = Field(
         min_length=26,
@@ -232,6 +242,14 @@ class PedidoHistorialResponse(BaseModel):
 
     token_sesion: str = Field(description="Token de sesión de mesa")
     id_mesa: str = Field(description="ID de la mesa")
+    estado_sesion: Optional[str] = Field(
+        default="activa",
+        description="Estado actual de la sesión"
+    )
+    mensaje: Optional[str] = Field(
+        default=None,
+        description="Mensaje informativo sobre el estado de la sesión"
+    )
     total_pedidos: int = Field(description="Total de pedidos en la sesión")
     pedidos: List[PedidoHistorialDetalle] = Field(description="Lista de pedidos")
 

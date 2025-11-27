@@ -2,10 +2,13 @@
 Pydantic schemas for PedidoProducto (Order Item) entities.
 """
 
-from typing import Optional, ClassVar, List
+from typing import Optional, ClassVar, List, TYPE_CHECKING
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
+
+if TYPE_CHECKING:
+    from src.api.schemas.pedido_schema import PedidoItemResponse
 
 
 class PedidoProductoBase(BaseModel):
@@ -113,3 +116,14 @@ class PedidoProductoList(BaseModel):
 
     items: List[PedidoProductoSummary]
     total: int = Field(description="Total number of pedido productos")
+
+
+class PedidoItemList(BaseModel):
+    """Schema for list of items with opciones."""
+
+    items: List["PedidoItemResponse"]
+    total: int = Field(description="Total number of items")
+
+
+# Import PedidoItemResponse for items with opciones (at the end to avoid circular imports)
+from src.api.schemas.pedido_schema import PedidoItemResponse

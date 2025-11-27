@@ -347,7 +347,7 @@ async def list_qr_urls(
     Genera las URLs de QR para todas las mesas.
 
     Retorna una lista con el ID de cada mesa y su URL de QR correspondiente.
-    Formato: https://front-dp2.onrender.com/about?{idMesa}
+    Formato: https://front-dp2.onrender.com/login?{idMesa}
 
     Args:
         skip: Número de registros a omitir (offset), por defecto 0.
@@ -370,8 +370,7 @@ async def list_qr_urls(
         for mesa in mesas_list.items:
             qr_urls.append({
                 "id_mesa": mesa.id,
-                "numero_mesa": mesa.numero_mesa,
-                "qr_url": f"https://front-dp2.onrender.com/about?{mesa.id}"
+                "qr_url": f"https://front-dp2.onrender.com/login?{mesa.id}"
             })
 
         return qr_urls

@@ -19,7 +19,7 @@ class UsuarioBase(BaseModel):
     telefono: Optional[str] = Field(
         default=None, description="Teléfono del usuario", max_length=20
     )
-    id_rol: str = Field(description="ID del rol asignado al usuario")
+    id_rol: Optional[str] = Field(default=None, description="ID del rol asignado al usuario")
 
 
 class UsuarioCreate(UsuarioBase):
@@ -101,6 +101,13 @@ class LoginRequest(BaseModel):
 
     email: EmailStr = Field(description="Email del usuario")
     password: str = Field(description="Contraseña del usuario", min_length=1)
+
+
+class AdminLoginRequest(BaseModel):
+    """Schema para solicitud de login de administrador."""
+
+    usuario: str = Field(description="Usuario (email) del administrador", min_length=1)
+    password: str = Field(description="Contraseña del administrador", min_length=1)
 
 
 class LoginResponse(BaseModel):
