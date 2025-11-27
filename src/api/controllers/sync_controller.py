@@ -63,169 +63,125 @@ async def sync_platos(
         Si ocurre un error durante el proceso de sincronización
     """
     try:
-        # Inicializar servicios
+        from src.models.menu.producto_model import ProductoModel
+        from src.models.menu.categoria_model import CategoriaModel
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
         categoria_service = CategoriaService(session)
         producto_service = ProductoService(session)
-
-        # Contadores para el reporte final
         resultados = {
-            "categorias_creadas": 0,
-            "categorias_actualizadas": 0,
-            "productos_creados": 0,
-            "productos_actualizados": 0,
-            "productos_desactivados": 0,
         }
 
-        categorias_response = await categoria_service.get_categorias(skip=0, limit=1000)
-        categorias_dict = {
-            categoria.nombre.upper(): categoria for categoria in categorias_response.items
+        categorias_to_sync = set([prod.categoria for prod in productos_domotica])
+        existing_categorias = await session.execute(
+            select(CategoriaModel)
+        )
+        existing_cat_map: Dict[str, Any] = {cat.nombre: cat for cat in existing_categorias.scalars().all()}
+        existing_set = set(existing_cat_map.keys())
+
+        categorias_crear = [
+            CategoriaCreate(
+                nombre=cat, descripcion=f"Categoría {cat} creada desde sincronización"
+            )
+            for cat in categorias_to_sync
+            if cat not in existing_set
+        ]
+        
+        nuevas_categorias = await categoria_service.batch_create_categorias(categorias_crear)
+        resultados["categorias_creadas"] = len(nuevas_categorias)
+        
+        for cat in nuevas_categorias:
+            existing_cat_map[cat.nombre.upper()] = cat
+
+        logger.info(f"[SYNC PLATOS] Categorías a crear: {existing_cat_map.keys()}")
+
+        categorias_desactivar = [
+            existing_cat_map[cat.upper()].id
+            for cat in existing_set
+            if cat not in categorias_to_sync
+        ]
+        resultados["categorias_desactivadas"] = (
+            await categoria_service.deactivate_categorias(categorias_desactivar)
+        )
+
+        categorias_activar = [
+            existing_cat_map[cat.upper()].id for cat in existing_set if cat in categorias_to_sync
+        ]
+        resultados["categorias_activadas"] = (
+            await categoria_service.activate_categorias(categorias_activar)
+        )
+
+        productos_to_sync = {
+            (prod.categoria.upper(), prod.nombre.upper()): prod for prod in productos_domotica
         }
-        productos_response = await producto_service.get_productos(skip=0, limit=10000)
-        productos_dict = {
-            producto.nombre: producto for producto in productos_response.items
+        result = await session.execute(
+            select(ProductoModel).options(selectinload(ProductoModel.categoria))
+        )
+        existing_productos = result.scalars().all()
+        existing_prod_map = {
+            (prod.categoria.nombre.upper(), prod.nombre.upper()): prod for prod in existing_productos
         }
+        existing_prod_set = set(existing_prod_map.keys())
+        productos_crear = [
+            ProductoCreate(
+                nombre=prod.nombre,
+                descripcion=f"Producto {prod.nombre} creado desde sincronización",
+                precio_base=Decimal(prod.precio) if prod.precio else Decimal("0.00"),
+                id_categoria=existing_cat_map[prod.categoria.upper()].id,
+            )
+            for key, prod in productos_to_sync.items()
+            if key not in existing_prod_set and prod.nombre.strip() != ""
+        ]
+        resultados["productos_creados"] = len(
+            await producto_service.batch_create_productos(productos_crear)
+        )
 
-        categorias_a_crear: List[CategoriaCreate] = []
-        productos_a_crear: List[ProductoCreate] = []
-        productos_a_actualizar: List[Tuple[str, ProductoUpdate]] = []
-        
-        categorias_nuevas: Set[str] = set()
-        
-        for producto_domotica in productos_domotica:
-            nombre_categoria = producto_domotica.categoria.upper()
-            if nombre_categoria not in categorias_dict and nombre_categoria not in categorias_nuevas:
-                nueva_categoria = CategoriaCreate(nombre=producto_domotica.categoria)
-                categorias_a_crear.append(nueva_categoria)
-                categorias_nuevas.add(nombre_categoria)
-        
-        categorias_creadas = await categoria_service.batch_create_categorias(categorias_a_crear)
-        resultados["categorias_creadas"] += len(categorias_a_crear)
-        
-        # Actualizar el diccionario de categorías con las recién creadas
-        for categoria in categorias_creadas:
-            categorias_dict[categoria.nombre.upper()] = categoria  # type: ignore[assignment]
+        ids_update = []
+        data_update = []
 
-        # Procesar productos
-        for producto_domotica in productos_domotica:
-            # Convertir precio de string a decimal si es necesario
-            try:
-                if isinstance(producto_domotica.precio, Decimal):
-                    precio = producto_domotica.precio
-                elif isinstance(producto_domotica.precio, str):
-                    # Remover símbolos de moneda y espacios
-                    precio_limpio = producto_domotica.precio.replace("S/.", "").replace(",", ".").strip()
-                    precio = Decimal(precio_limpio)
-                elif isinstance(producto_domotica.precio, (int, float)):
-                    precio = Decimal(str(producto_domotica.precio))
-                else:
-                    precio = Decimal("0.0")
-                    logger.warning(f"Tipo de precio desconocido para '{producto_domotica.nombre}': {type(producto_domotica.precio)}")
-            except (ValueError, TypeError, InvalidOperation) as e:
-                precio = Decimal("0.0")
-                logger.warning(f"Error al convertir precio para '{producto_domotica.nombre}': {producto_domotica.precio} - {e}")
-            
-            if producto_domotica.nombre not in productos_dict:
-                # Nuevo producto - preparamos el objeto ProductoCreate
-                try:
-                    # Intentar obtener la categoría
-                    nombre_categoria = producto_domotica.categoria.upper()
-                    if nombre_categoria in categorias_dict:
-                        id_categoria = categorias_dict[nombre_categoria].id
-                    else:
-                        id_categoria = None
-                    
-                    if id_categoria:
-                        nuevo_producto = ProductoCreate(
-                            nombre=producto_domotica.nombre,
-                            precio_base=precio,
-                            descripcion=f"Producto importado desde Domotica: {producto_domotica.nombre}",
-                            id_categoria=id_categoria
-                        )
-                        productos_a_crear.append(nuevo_producto)
-                    else:
-                        logger.warning(f"No se pudo crear el producto {producto_domotica.nombre} porque su categoría {producto_domotica.categoria} no existe")
-                except Exception as e:
-                    logger.error(f"Error preparando producto para crear: {str(e)}")
-            else:
-                # Producto existente - preparamos la tupla (id, ProductoUpdate) para actualización
-                producto_existente = productos_dict[producto_domotica.nombre]
-                try:
-                    # Intentar obtener la categoría
-                    nombre_categoria = producto_domotica.categoria.upper()
-                    if nombre_categoria in categorias_dict:
-                        id_categoria = categorias_dict[nombre_categoria].id
-                    else:
-                        id_categoria = None
-                    
-                    if id_categoria:
-                        producto_actualizado = ProductoUpdate(
-                            id_categoria=id_categoria,
-                            precio_base=precio
-                        )
-                        productos_a_actualizar.append((producto_existente.id, producto_actualizado))
-                    else:
-                        logger.warning(f"No se pudo actualizar el producto {producto_domotica.nombre} porque su categoría {producto_domotica.categoria} no existe")
-                except Exception as e:
-                    logger.error(f"Error preparando producto para actualizar: {str(e)}")
+        for key, prod_domotica in productos_to_sync.items():
+            if key in existing_prod_map:
+                prod_db = existing_prod_map[key]
+                ids_update.append(prod_db.id)
+                data_update.append(
+                    {
+                        "precio_base": (
+                            Decimal(prod_domotica.precio)
+                            if prod_domotica.precio
+                            else Decimal("0.00")
+                        ),
+                        "disponible": True,
+                    }
+                )
 
-        # ✅ BATCH: Ejecutar operaciones en lote para productos
-        if productos_a_crear:
-            try:
-                productos_creados = await producto_service.batch_create_productos(productos_a_crear)
-                resultados["productos_creados"] += len(productos_creados)
-                logger.info(f"✅ Productos creados en lote: {len(productos_creados)}")
-            except Exception as e:
-                logger.error(f"❌ Error al crear productos en lote: {str(e)}")
+        if ids_update:
+            resultados["productos_actualizados"] = (
+                await producto_service.repository.batch_update(ids_update, data_update)
+            )
 
-        if productos_a_actualizar:
-            try:
-                productos_actualizados = await producto_service.batch_update_productos(productos_a_actualizar)
-                resultados["productos_actualizados"] += len(productos_actualizados)
-                logger.info(f"✅ Productos actualizados en lote: {len(productos_actualizados)}")
-            except Exception as e:
-                logger.error(f"❌ Error al actualizar productos en lote: {str(e)}")
+        ids_deactivate = []
+        data_deactivate = []
 
-        # Marcar productos inactivos
-        productos_vistos = set(producto.nombre for producto in productos_domotica)
-        productos_a_desactivar = []
-        
-        # Crear lista de tuplas (id, ProductoUpdate) para desactivar productos
-        for nombre, producto in productos_dict.items():
-            if nombre not in productos_vistos and producto.disponible:
-                productos_a_desactivar.append((producto.id, ProductoUpdate(disponible=False)))
-        
-        # ✅ BATCH: Desactivar productos en lote
-        if productos_a_desactivar:
-            try:
-                productos_desactivados = await producto_service.batch_update_productos(productos_a_desactivar)
-                resultados["productos_desactivados"] += len(productos_desactivados)
-                logger.info(f"✅ Productos desactivados en lote: {len(productos_desactivados)}")
-            except Exception as e:
-                logger.error(f"❌ Error al desactivar productos en lote: {str(e)}")
+        for key, prod_db in existing_prod_map.items():
+            if key not in productos_to_sync:
+                ids_deactivate.append(prod_db.id)
+                data_deactivate.append({"disponible": False})
 
-        return {
-            "status": "success",
-            "message": "Sincronización completada correctamente con operaciones por lotes",
-            "resultados": resultados
-        }
+        if ids_deactivate:
+            resultados["productos_desactivados"] = (
+                await producto_service.repository.batch_update(
+                    ids_deactivate, data_deactivate
+                )
+            )
+
+        return resultados
 
     except Exception as e:
         logger.exception(f"Error durante la sincronización de platos: {str(e)}")
 
-        # Mensaje de error más informativo según el tipo de error
-        error_message = str(e)
-        if "ya exist" in error_message.lower():
-            error_detail = "Uno o más elementos ya existen en la base de datos. Por favor revise los nombres de categorías y productos."
-        elif "foreign key" in error_message.lower():
-            error_detail = "Error de referencia: no se puede crear/actualizar un registro porque depende de otro que no existe."
-        elif "timeout" in error_message.lower():
-            error_detail = "Tiempo de espera agotado en la operación de base de datos."
-        else:
-            error_detail = f"Error durante la sincronización: {str(e)}"
-
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error_detail,
+            detail="Error durante la sincronización de platos",
         )
 
 
@@ -284,15 +240,7 @@ async def sync_mesas(
 
         # PASO 1: Obtener Local "Barra Arena"
         local_service = LocalService(session)
-        try:
-            local = await local_service.get_local_by_codigo("BA-001")
-            logger.info(f"[SYNC MESAS] Local encontrado: {local.nombre} (ID: {local.id})")
-        except Exception as e:
-            logger.error(f"[SYNC MESAS] Error al obtener local 'BA-001': {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Local 'Barra Arena' no encontrado. Ejecute primero el enriquecimiento de datos.",
-            )
+        local = await local_service.get_local_by_codigo("BA-001")
 
         # PASO 2: Extraer zonas únicas del JSON
         zonas_unicas = set(mesa.zona for mesa in mesas_domotica)
@@ -306,15 +254,16 @@ async def sync_mesas(
             # Buscar si ya existe zona con ese nombre para este local
             result = await session.execute(
                 select(ZonaModel).where(
-                    ZonaModel.id_local == local.id,
-                    ZonaModel.nombre == nombre_zona
+                    ZonaModel.id_local == local.id, ZonaModel.nombre == nombre_zona
                 )
             )
             zona = result.scalars().first()
 
             if zona:
                 # Zona ya existe
-                logger.info(f"[SYNC MESAS] Zona '{nombre_zona}' ya existe (ID: {zona.id})")
+                logger.info(
+                    f"[SYNC MESAS] Zona '{nombre_zona}' ya existe (ID: {zona.id})"
+                )
                 zona_map[nombre_zona] = zona.id
                 resultados["zonas_existentes"] += 1
             else:
@@ -328,7 +277,9 @@ async def sync_mesas(
                         capacidad_maxima=None,
                     )
                 )
-                logger.info(f"[SYNC MESAS] Zona '{nombre_zona}' creada (ID: {nueva_zona.id})")
+                logger.info(
+                    f"[SYNC MESAS] Zona '{nombre_zona}' creada (ID: {nueva_zona.id})"
+                )
                 zona_map[nombre_zona] = nueva_zona.id
                 resultados["zonas_creadas"] += 1
 
@@ -346,7 +297,11 @@ async def sync_mesas(
             estado_str = getattr(mesa, "estado", None)
             if estado_str:
                 try:
-                    estado = EstadoMesa(estado_str.lower()) if estado_str.lower() in [e.value for e in EstadoMesa] else EstadoMesa.DISPONIBLE
+                    estado = (
+                        EstadoMesa(estado_str.lower())
+                        if estado_str.lower() in [e.value for e in EstadoMesa]
+                        else EstadoMesa.DISPONIBLE
+                    )
                 except Exception:
                     estado = EstadoMesa.DISPONIBLE
             else:
@@ -359,7 +314,7 @@ async def sync_mesas(
                     capacidad=capacidad,
                     id_zona=zona_map[mesa.zona],
                     nota=mesa.nota if hasattr(mesa, "nota") else None,
-                    estado=estado
+                    estado=estado,
                 )
             )
 
@@ -386,125 +341,4 @@ async def sync_mesas(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error durante la sincronización: {str(e)}",
-        )
-
-
-@router.post(
-    "/enrich",
-    status_code=status.HTTP_200_OK,
-    summary="Enriquecer datos existentes",
-    description="Ejecuta el script de enriquecimiento para agregar alérgenos, tipos de opciones y relaciones a los productos existentes. Este endpoint debe ejecutarse DESPUÉS de sincronizar los productos desde Domotica.",
-)
-async def enrich_database(
-    session: AsyncSession = Depends(get_database_session),
-) -> Dict[str, Any]:
-    """
-    Enriquece los datos existentes en la base de datos.
-    
-    Este endpoint debe ejecutarse DESPUÉS de sincronizar los productos desde Domotica.
-    
-    Realiza las siguientes operaciones:
-    1. Crea 8 alérgenos comunes (si no existen)
-    2. Crea 4 tipos de opciones (si no existen)
-    3. Asocia alérgenos a productos usando reglas inteligentes basadas en nombres
-    4. Crea opciones de productos (nivel de ají, acompañamientos, bebidas, extras)
-    5. Crea roles de usuario (si no existen)
-    6. Actualiza imágenes de productos y categorías desde seed data
-    
-    Parameters
-    ----------
-    session : AsyncSession
-        Sesión de base de datos proporcionada por FastAPI
-        
-    Returns
-    -------
-    Dict[str, Any]
-        Resumen de las operaciones realizadas incluyendo:
-        - status: Estado de la operación
-        - message: Mensaje descriptivo
-        - data: Estadísticas del enriquecimiento (productos procesados, alérgenos creados, etc.)
-        
-    Raises
-    ------
-    HTTPException
-        Si ocurre un error durante el proceso de enriquecimiento
-        
-    Example
-    -------
-    Response exitoso:
-    ```json
-    {
-        "status": "success",
-        "message": "Enriquecimiento completado exitosamente",
-        "data": {
-            "productos_procesados": 274,
-            "alergenos_creados": 8,
-            "tipos_opciones_creados": 4,
-            "relaciones_alergenos": 150,
-            "opciones_creadas": 800
-        }
-    }
-    ```
-    """
-    try:
-        from scripts.enrich_existing_data import DataEnricher
-        from sqlalchemy import select, func
-        from src.models.menu.producto_model import ProductoModel
-        from src.models.menu.alergeno_model import AlergenoModel
-        from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
-        
-        logger.info("🌱 Iniciando enriquecimiento de datos...")
-        
-        # Obtener estadísticas antes del enriquecimiento
-        query_productos = select(func.count(ProductoModel.id))
-        result_productos = await session.execute(query_productos)
-        productos_count = result_productos.scalar() or 0
-        
-        query_alergenos = select(func.count(AlergenoModel.id))
-        result_alergenos = await session.execute(query_alergenos)
-        alergenos_antes = result_alergenos.scalar() or 0
-        
-        query_tipos = select(func.count(TipoOpcionModel.id))
-        result_tipos = await session.execute(query_tipos)
-        tipos_antes = result_tipos.scalar() or 0
-        
-        logger.info(f"📊 Estado inicial: {productos_count} productos, {alergenos_antes} alérgenos, {tipos_antes} tipos de opciones")
-        
-        # Crear enricher y ejecutar
-        enricher = DataEnricher(session)
-        await enricher.enrich_all()
-        
-        # Commit de los cambios
-        await session.commit()
-        
-        # Obtener estadísticas después del enriquecimiento
-        query_alergenos_despues = select(func.count(AlergenoModel.id))
-        result_alergenos_despues = await session.execute(query_alergenos_despues)
-        alergenos_despues = result_alergenos_despues.scalar() or 0
-        
-        query_tipos_despues = select(func.count(TipoOpcionModel.id))
-        result_tipos_despues = await session.execute(query_tipos_despues)
-        tipos_despues = result_tipos_despues.scalar() or 0
-        
-        logger.info(f"✅ Enriquecimiento completado: {alergenos_despues - alergenos_antes} alérgenos nuevos, {tipos_despues - tipos_antes} tipos nuevos")
-        
-        return {
-            "status": "success",
-            "message": "Enriquecimiento completado exitosamente",
-            "data": {
-                "productos_procesados": productos_count,
-                "alergenos_creados": alergenos_despues - alergenos_antes,
-                "alergenos_totales": alergenos_despues,
-                "tipos_opciones_creados": tipos_despues - tipos_antes,
-                "tipos_opciones_totales": tipos_despues,
-            }
-        }
-        
-    except Exception as e:
-        import traceback
-        logger.error(f"❌ Error durante el enriquecimiento: {str(e)}")
-        logger.error(f"Stack trace:\n{traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error durante el enriquecimiento: {str(e)}",
         )

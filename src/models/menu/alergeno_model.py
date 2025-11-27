@@ -5,9 +5,9 @@ Implementa la estructura de datos para los alérgenos presentes en los productos
 del menú, adaptado para coincidir con el esquema existente de MySQL restaurant_dp2.alergeno.
 """
 
-from typing import Any, Dict, Optional, Type, TypeVar, TYPE_CHECKING, List
+from typing import Optional, TYPE_CHECKING, List
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Boolean, Enum, inspect
+from sqlalchemy import String, Text, Boolean, Enum
 from src.models.base_model import BaseModel
 from src.models.mixins.audit_mixin import AuditMixin
 from src.core.enums.alergeno_enums import NivelRiesgo
@@ -15,9 +15,6 @@ from src.core.enums.alergeno_enums import NivelRiesgo
 if TYPE_CHECKING:
     from src.models.menu.producto_model import ProductoModel
     from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
-
-# Definimos un TypeVar para el tipado genérico
-T = TypeVar("T", bound="AlergenoModel")
 
 
 class AlergenoModel(BaseModel, AuditMixin):
@@ -81,7 +78,6 @@ class AlergenoModel(BaseModel, AuditMixin):
     productos_alergenos: Mapped[List["ProductoAlergenoModel"]] = relationship(
         "ProductoAlergenoModel",
         back_populates="alergeno",
-        lazy="selectin",
         cascade="all, delete-orphan"
     )
 
@@ -90,53 +86,8 @@ class AlergenoModel(BaseModel, AuditMixin):
         "ProductoModel",
         secondary="productos_alergenos",
         back_populates="alergenos",
-        lazy="selectin",
         viewonly=True
     )
-
-    # Métodos comunes para todos los modelos
-    def to_dict(self) -> Dict[str, Any]:
-        """Convierte la instancia del modelo a un diccionario.
-
-        Transforma todos los atributos del modelo en un diccionario para
-        facilitar su serialización y uso en APIs.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Diccionario con los nombres de columnas como claves y sus valores correspondientes.
-        """
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
-
-    @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
-        """Crea una instancia del modelo a partir de un diccionario.
-
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Diccionario con los datos para crear la instancia.
-
-        Returns
-        -------
-        T
-            Nueva instancia del modelo con los datos proporcionados.
-        """
-        return cls(
-            **{k: v for k, v in data.items() if k in inspect(cls).columns.keys()}
-        )
-
-    def update_from_dict(self, data: Dict[str, Any]) -> None:
-        """Actualiza la instancia con datos de un diccionario.
-
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Diccionario con los datos para actualizar la instancia.
-        """
-        for key, value in data.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
 
     def __repr__(self) -> str:
         """Representación string del modelo para debugging.

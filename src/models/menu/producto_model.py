@@ -5,7 +5,7 @@ Implementa la estructura de datos para los productos (platos) disponibles en el 
 adaptado para coincidir con el esquema de MySQL restaurant_dp2.producto.
 """
 
-from typing import Any, Dict, Optional, Type, TypeVar, TYPE_CHECKING, List
+from typing import Optional, TYPE_CHECKING, List
 from decimal import Decimal
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Boolean, Text, DECIMAL, ForeignKey, Index
@@ -18,9 +18,6 @@ if TYPE_CHECKING:
     from src.models.menu.alergeno_model import AlergenoModel
     from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
     from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
-
-# Definimos un TypeVar para el tipado genérico
-T = TypeVar("T", bound="ProductoModel")
 
 
 class ProductoModel(BaseModel, AuditMixin):
@@ -87,15 +84,13 @@ class ProductoModel(BaseModel, AuditMixin):
     # Relación con Categoría
     categoria: Mapped["CategoriaModel"] = relationship(
         "CategoriaModel",
-        back_populates="productos",
-        lazy="selectin"
+        back_populates="productos"
     )
 
     # Relación con ProductoOpcion (opciones disponibles para este producto)
     opciones: Mapped[List["ProductoOpcionModel"]] = relationship(
         "ProductoOpcionModel",
         back_populates="producto",
-        lazy="selectin",
         cascade="all, delete-orphan"
     )
 
@@ -104,7 +99,6 @@ class ProductoModel(BaseModel, AuditMixin):
     productos_alergenos: Mapped[List["ProductoAlergenoModel"]] = relationship(
         "ProductoAlergenoModel",
         back_populates="producto",
-        lazy="selectin",
         cascade="all, delete-orphan",
         foreign_keys="ProductoAlergenoModel.id_producto"
     )
@@ -115,7 +109,6 @@ class ProductoModel(BaseModel, AuditMixin):
         "AlergenoModel",
         secondary="productos_alergenos",
         back_populates="productos",
-        lazy="selectin",
         viewonly=True  # Solo lectura, modificar vía productos_alergenos
     )
 
@@ -123,7 +116,6 @@ class ProductoModel(BaseModel, AuditMixin):
         "TipoOpcionModel",
         secondary="productos_opciones",
         back_populates="productos",
-        lazy="selectin",
         viewonly=True
     )
 
@@ -131,55 +123,6 @@ class ProductoModel(BaseModel, AuditMixin):
     __table_args__ = (
         Index('idx_busqueda', 'nombre', 'descripcion', mysql_prefix='FULLTEXT'),
     )
-
-    # Métodos comunes para todos los modelos
-    def to_dict(self) -> Dict[str, Any]:
-        """Convierte la instancia del modelo a un diccionario.
-
-        Transforma todos los atributos del modelo en un diccionario para
-        facilitar su serialización y uso en APIs.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Diccionario con los nombres de columnas como claves y sus valores correspondientes.
-        """
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
-
-    @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
-        """Crea una instancia del modelo a partir de un diccionario.
-
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Diccionario con los datos para crear la instancia.
-
-        Returns
-        -------
-        T
-            Nueva instancia del modelo con los datos proporcionados.
-        """
-        # Filtrar solo columnas válidas, ignorar relaciones
-        valid_columns = [c.name for c in cls.__table__.columns]
-        filtered_data = {
-            k: v for k, v in data.items() 
-            if k in valid_columns
-        }
-        return cls(**filtered_data)
-
-    def update_from_dict(self, data: Dict[str, Any]) -> None:
-        """Actualiza la instancia con datos de un diccionario.
-
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Diccionario con los datos para actualizar la instancia.
-        """
-        for key, value in data.items():
-            # Ignorar relaciones, solo actualizar columnas directas
-            if hasattr(self, key) and key != 'id':
-                setattr(self, key, value)
 
     def __repr__(self) -> str:
         """Representación en string del modelo Producto."""

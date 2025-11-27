@@ -163,5 +163,6 @@ async def test_update_producto_completo_not_found_integration(
     # Assert
     assert response.status_code == 404
     response_data = response.json()
-    assert "detail" in response_data
-    assert "No se encontró el producto" in response_data["detail"]
+    assert "error" in response_data
+    assert response_data["error"]["type"] == "ProductoNotFoundError"
+    assert "No se encontró el producto" in response_data["error"]["message"]

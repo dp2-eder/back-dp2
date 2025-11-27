@@ -36,7 +36,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 NotFoundError,
                 ConflictError,
                 UnauthorizedError,
-                ForbiddenError
+                ForbiddenError,
             )
 
             if isinstance(e, BusinessError):
@@ -62,20 +62,20 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
             ConflictError,
             UnauthorizedError,
             ForbiddenError,
-            BusinessError
         )
 
-        # Map business errors to HTTP status codes
-        status_code_map = {
-            ValidationError: 400,
-            NotFoundError: 404,
-            ConflictError: 409,
-            UnauthorizedError: 401,
-            ForbiddenError: 403,
-            BusinessError: 400,  # Default for other business errors
-        }
-
-        status_code = status_code_map.get(type(error), 400)
+        if isinstance(error, UnauthorizedError):
+            status_code = 401
+        elif isinstance(error, ForbiddenError):
+            status_code = 403
+        elif isinstance(error, NotFoundError):
+            status_code = 404
+        elif isinstance(error, ConflictError):
+            status_code = 409
+        elif isinstance(error, ValidationError):
+            status_code = 400
+        else:
+            status_code = 400
 
         error_response = {
             "error": {
@@ -95,15 +95,14 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 "error_message": error.message,
                 "path": request.url.path,
                 "method": request.method,
-            }
+            },
         )
 
-        return JSONResponse(
-            status_code=status_code,
-            content=error_response
-        )
+        return JSONResponse(status_code=status_code, content=error_response)
 
-    async def _handle_unexpected_error(self, error: Exception, request: Request) -> JSONResponse:
+    async def _handle_unexpected_error(
+        self, error: Exception, request: Request
+    ) -> JSONResponse:
         """
         Handle unexpected errors.
 
@@ -133,10 +132,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 "error_message": str(error),
                 "path": request.url.path,
                 "method": request.method,
-            }
+            },
         )
 
-        return JSONResponse(
-            status_code=500,
-            content=error_response
-        )
+        return JSONResponse(status_code=500, content=error_response)
