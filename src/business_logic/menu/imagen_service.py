@@ -6,19 +6,21 @@ en el sistema de archivos.
 """
 
 from pathlib import Path
-from typing import Optional
 from fastapi import UploadFile, HTTPException, status
 from PIL import Image
 import io
+
+from src.core.config import get_settings, Settings
+settings: Settings = get_settings()
 
 
 class ImagenService:
     """Servicio para gestión de imágenes de productos."""
 
     # Configuración
-    STATIC_DIR = Path("app/static/images")
-    ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
-    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+    STATIC_DIR = Path(settings.static_dir) / settings.images_dir
+    ALLOWED_EXTENSIONS = set(settings.allowed_extensions)
+    MAX_FILE_SIZE = settings.max_file_size
     MAX_DIMENSIONS = (2048, 2048)
 
     @classmethod

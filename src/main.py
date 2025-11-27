@@ -22,14 +22,15 @@ logger = logging.getLogger(__name__)
 
 def _mount_static_files(app: FastAPI) -> None:
     """Monta los archivos estáticos de la aplicación."""
-    static_dir = Path("static/images")
-    if static_dir.exists():
-        logger.info(f"Directorio estático montado: {static_dir}")
-    else:
-        logger.warning(f"Directorio estático no encontrado: {static_dir}")
+    settings = get_settings()
+    static_dir = Path(settings.static_dir)
+    images_dir = static_dir / settings.images_dir
+    if not static_dir.exists():
         os.makedirs(static_dir, exist_ok=True)
-
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    if not images_dir.exists():
+        os.makedirs(images_dir, exist_ok=True)
+        
+    app.mount("/static", StaticFiles(directory=str(images_dir)), name="static")
 
 
 def _configure_middleware(app: FastAPI, settings) -> None:
