@@ -5,12 +5,16 @@ Implementa la estructura de datos para los alérgenos presentes en los productos
 del menú, adaptado para coincidir con el esquema existente de MySQL restaurant_dp2.alergeno.
 """
 
-from typing import Any, Dict, Optional, Type, TypeVar
-from sqlalchemy.orm import Mapped, mapped_column
+from typing import Any, Dict, Optional, Type, TypeVar, TYPE_CHECKING, List
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Text, Boolean, Enum, inspect
 from src.models.base_model import BaseModel
 from src.models.mixins.audit_mixin import AuditMixin
 from src.core.enums.alergeno_enums import NivelRiesgo
+
+if TYPE_CHECKING:
+    from src.models.menu.producto_model import ProductoModel
+    from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
 
 # Definimos un TypeVar para el tipado genérico
 T = TypeVar("T", bound="AlergenoModel")
@@ -71,6 +75,23 @@ class AlergenoModel(BaseModel, AuditMixin):
         Boolean, 
         nullable=False, 
         default=True
+    )
+
+    # Relación con la tabla intermedia
+    productos_alergenos: Mapped[List["ProductoAlergenoModel"]] = relationship(
+        "ProductoAlergenoModel",
+        back_populates="alergeno",
+        lazy="selectin",
+        cascade="all, delete-orphan"
+    )
+
+    # Relación directa many-to-many con Productos
+    productos: Mapped[List["ProductoModel"]] = relationship(
+        "ProductoModel",
+        secondary="productos_alergenos",
+        back_populates="alergenos",
+        lazy="selectin",
+        viewonly=True
     )
 
     # Métodos comunes para todos los modelos

@@ -3,7 +3,7 @@ Schemas para las operaciones administrativas de sesiones de mesa.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SesionDetalleSchema(BaseModel):
@@ -49,8 +49,8 @@ class EstadoSesionesResponse(BaseModel):
     detalles_duplicados: List[MesaDuplicadosSchema] = Field(..., description="Detalles de mesas con duplicados")
     sesiones_por_mesa: List[SesionPorMesaSchema] = Field(..., description="Lista de sesiones por mesa")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": 200,
                 "total_sesiones_activas": 5,
@@ -71,6 +71,7 @@ class EstadoSesionesResponse(BaseModel):
                 ]
             }
         }
+    )
 
 
 class FixDuplicatesResponse(BaseModel):
@@ -83,8 +84,8 @@ class FixDuplicatesResponse(BaseModel):
     sesiones_mantenidas: int = Field(..., description="Número de sesiones mantenidas")
     detalles: List[MesaProcesamientoDetalleSchema] = Field(..., description="Detalles del procesamiento")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": 200,
                 "success": True,
@@ -112,6 +113,7 @@ class FixDuplicatesResponse(BaseModel):
                 ]
             }
         }
+    )
 
 
 class FinalizarExpiradasResponse(BaseModel):
@@ -122,8 +124,8 @@ class FinalizarExpiradasResponse(BaseModel):
     sesiones_finalizadas: int = Field(..., description="Número de sesiones finalizadas")
     detalles: List[SesionFinalizadaDetalleSchema] = Field(..., description="Detalles de las sesiones finalizadas")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": 200,
                 "success": True,
@@ -140,3 +142,4 @@ class FinalizarExpiradasResponse(BaseModel):
                 ]
             }
         }
+    )

@@ -6,13 +6,17 @@ con campos adicionales para detallar el nivel de presencia del alérgeno en cada
 Adaptado para coincidir con el esquema de MySQL restaurant_dp2.producto_alergeno.
 """
 
-from typing import Any, Dict, Optional, Type, TypeVar
-from sqlalchemy.orm import Mapped, mapped_column
+from typing import Any, Dict, Optional, Type, TypeVar, TYPE_CHECKING
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Boolean, Enum, ForeignKey, Index, UniqueConstraint, inspect
 from datetime import datetime
 from src.models.base_model import BaseModel
 from src.models.mixins.audit_mixin import AuditMixin
 from src.core.enums.alergeno_enums import NivelPresencia
+
+if TYPE_CHECKING:
+    from src.models.menu.producto_model import ProductoModel
+    from src.models.menu.alergeno_model import AlergenoModel
 
 # Definimos un TypeVar para el tipado genérico
 T = TypeVar("T", bound="ProductoAlergenoModel")
@@ -82,6 +86,19 @@ class ProductoAlergenoModel(BaseModel, AuditMixin):
     )
 
     # Los campos de auditoría se heredan de AuditMixin
+
+    # Relaciones hacia Producto y Alergeno
+    producto: Mapped["ProductoModel"] = relationship(
+        "ProductoModel",
+        back_populates="productos_alergenos",
+        lazy="selectin"
+    )
+    
+    alergeno: Mapped["AlergenoModel"] = relationship(
+        "AlergenoModel",
+        back_populates="productos_alergenos",
+        lazy="selectin"
+    )
 
     # UniqueConstraint para evitar duplicados + Índices para mejorar búsquedas
     __table_args__ = (

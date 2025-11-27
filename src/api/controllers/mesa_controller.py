@@ -102,7 +102,7 @@ router = APIRouter(prefix="/mesas", tags=["Mesas"])
 )
 async def create_mesa(
     mesa_data: MesaCreate, session: AsyncSession = Depends(get_database_session)
-) -> MesaDetalleResponse:
+) -> MesaResponse:
     """
     Crea una nueva mesa en el sistema.
 
@@ -220,7 +220,7 @@ async def update_mesa(
     mesa_id: str,
     mesa_data: MesaUpdate,
     session: AsyncSession = Depends(get_database_session),
-) -> MesaDetalleResponse:
+) -> MesaResponse:
     """
     Actualiza una mesa existente.
 

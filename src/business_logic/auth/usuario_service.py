@@ -149,13 +149,13 @@ class UsuarioService:
         if not usuario:
             raise InvalidCredentialsError("Usuario o contraseña incorrectos")
 
-        # Verificar si el usuario está activo
-        if not usuario.activo:
-            raise InactiveUserError("El usuario está inactivo. Contacte al administrador.")
+        # # Verificar si el usuario está activo
+        # if not usuario.activo:
+        #     raise InactiveUserError("El usuario está inactivo. Contacte al administrador.")
 
         # Verificar contraseña
         # Obtener password_hash del modelo (puede estar en atributos dinámicos)
-        password_hash = getattr(usuario, 'password_hash', None)
+        password_hash = getattr(usuario, 'password', None)
         if not password_hash:
             raise InvalidCredentialsError("Usuario o contraseña incorrectos")
 
@@ -260,7 +260,6 @@ class UsuarioService:
                 nombre=register_data.nombre,
                 telefono=register_data.telefono,
                 id_rol=register_data.id_rol,
-                activo=True,
             )
 
             # Persistir en la base de datos
@@ -491,4 +490,3 @@ class UsuarioService:
         # Eliminar el usuario
         result = await self.repository.delete(usuario_id)
         return result
-

@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
 from src.business_logic.menu.producto_service import ProductoService
+from src.business_logic.menu.producto_img_service import ProductoImagenService
 from src.api.schemas.producto_schema import (
+    ProductoBase,
     ProductoCreate,
     ProductoResponse,
     ProductoUpdate,
@@ -16,6 +18,7 @@ from src.api.schemas.producto_schema import (
     ProductoCardList,
     ProductoConOpcionesResponse,
     ProductoCompletoUpdateSchema,
+    ProductoImagenResponse,
 )
 from src.business_logic.exceptions.producto_exceptions import (
     ProductoValidationError,
@@ -23,6 +26,7 @@ from src.business_logic.exceptions.producto_exceptions import (
     ProductoConflictError,
 )
 from src.business_logic.menu.producto_alergeno_service import ProductoAlergenoService
+from src.core.auth_dependencies import get_current_admin
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
@@ -39,7 +43,7 @@ async def create_producto(
 ) -> ProductoResponse:
     """
     Crea un nuevo producto en el sistema.
-    
+
     Args:
         producto_data: Datos del producto a crear.
         session: Sesión de base de datos.
@@ -62,7 +66,7 @@ async def create_producto(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",
         )
-    
+
 @router.get(
     "/con-alergenos",
     status_code=status.HTTP_200_OK,
@@ -122,16 +126,16 @@ async def list_all_productos_cards(
 ) -> ProductoCardList:
     """
     Obtiene una lista paginada de TODOS los productos en formato card.
-    
+
     Este endpoint devuelve todos los productos con información completa de categoría:
     - Datos del producto: ID, nombre, imagen, precio
     - Datos de la categoría: ID, nombre, imagen
-    
+
     Args:
         skip: Número de registros a omitir (offset), por defecto 0.
         limit: Número máximo de registros a retornar, por defecto 100.
         session: Sesión de base de datos.
-        
+
     Returns:
         Lista paginada de productos en formato card con información de categoría.
 
@@ -169,17 +173,17 @@ async def list_productos_cards_by_categoria(
 ) -> ProductoCardList:
     """
     Obtiene una lista paginada de productos de una categoría específica en formato card.
-    
+
     Este endpoint devuelve productos filtrados por categoría con información completa:
     - Datos del producto: ID, nombre, imagen, precio
     - Datos de la categoría: ID, nombre, imagen
-    
+
     Args:
         categoria_id: ID de la categoría para filtrar productos.
         skip: Número de registros a omitir (offset), por defecto 0.
         limit: Número máximo de registros a retornar, por defecto 100.
         session: Sesión de base de datos.
-        
+
     Returns:
         Lista paginada de productos en formato card con información de categoría.
 
@@ -249,14 +253,14 @@ async def get_producto_con_opciones(
 ):
     """
     Obtiene un producto específico por su ID con opciones agrupadas por tipo.
-    
+
     Args:
         producto_id: ID del producto a buscar (ULID).
         session: Sesión de base de datos.
-        
+
     Returns:
         El producto con descripción, precio y opciones agrupadas por tipo.
-        
+
     Raises:
         HTTPException:
             - 404: Si no se encuentra el producto.
@@ -363,50 +367,6 @@ async def list_productos(
             detail=f"Error interno del servidor: {str(e)}",
         )
 
-
-@router.put(
-    "/{producto_id}",
-    response_model=ProductoResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Actualizar un producto",
-    description="Actualiza los datos de un producto existente.",
-)
-async def update_producto(
-    producto_id: str,
-    producto_data: ProductoUpdate,
-    session: AsyncSession = Depends(get_database_session),
-) -> ProductoResponse:
-    """
-    Actualiza un producto existente.
-
-    Args:
-        producto_id: ID del producto a actualizar.
-        producto_data: Datos del producto a actualizar.
-        session: Sesión de base de datos.
-
-    Returns:
-        El producto actualizado con todos sus datos.
-
-    Raises:
-        HTTPException:
-            - 404: Si no se encuentra el producto.
-            - 409: Si hay un conflicto (e.g., nombre duplicado).
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        producto_service = ProductoService(session)
-        return await producto_service.update_producto(producto_id, producto_data)
-    except ProductoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except ProductoConflictError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
-
-
 @router.delete(
     "/{producto_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -442,18 +402,179 @@ async def delete_producto(
         )
 
 
-@router.put(
-    "/{producto_id}/completo",
-    response_model=ProductoConOpcionesResponse,
+@router.post(
+    "/{producto_id}/imagen",
+    response_model=ProductoImagenResponse,
     status_code=status.HTTP_200_OK,
-    summary="Actualizar producto completo",
-    description="Actualiza completamente un producto con todos sus datos: alérgenos, secciones, tipos de opciones y opciones.",
+    summary="Subir imagen de producto",
+    description="Sube una imagen para un producto específico. La imagen se guarda con el ID del producto como nombre.",
 )
-async def update_producto_completo(
+async def upload_producto_imagen(
+    producto_id: str,
+    file: UploadFile = File(..., description="Archivo de imagen (JPG, PNG, WEBP)"),
+    session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
+) -> ProductoImagenResponse:
+    """
+    Sube una imagen para un producto específico.
+
+    La imagen se guardará en app/static/images/ con el nombre {producto_id}.{extension}.
+    Si ya existe una imagen para el producto, será reemplazada.
+
+    Validaciones:
+    - Formatos permitidos: JPG, JPEG, PNG, WEBP
+    - Tamaño máximo: 5 MB
+    - Dimensiones máximas: 2048x2048 px
+    - La imagen será optimizada automáticamente
+
+    Args:
+        producto_id: ID del producto (ULID).
+        file: Archivo de imagen a subir.
+        session: Sesión de base de datos.
+        current_admin: Usuario administrador autenticado.
+
+    Returns:
+        Información sobre la imagen guardada.
+
+    Raises:
+        HTTPException:
+            - 400: Si el archivo no es válido o excede límites.
+            - 401: Si no está autenticado como administrador.
+            - 404: Si el producto no existe.
+            - 500: Si ocurre un error al guardar la imagen.
+    """
+    if current_admin is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Se requiere autenticación de administrador"
+        )
+
+    try:
+        # Verificar que el producto existe
+        producto_service = ProductoService(session)
+        producto = await producto_service.repository.get_by_id(producto_id)
+        
+        if not producto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se encontró el producto con ID {producto_id}"
+            )
+
+        # Guardar imagen
+        imagen_path = await ProductoImagenService.save_producto_image(
+            producto_id=producto_id,
+            file=file,
+            optimize=True
+        )
+
+        # Actualizar el campo imagen_path directamente en el repositorio (sin validación de alérgenos)
+        await producto_service.repository.update(producto_id, imagen_path=imagen_path)
+
+        return ProductoImagenResponse(
+            message="Imagen subida exitosamente",
+            producto_id=producto_id,
+            imagen_path=imagen_path,
+            filename=file.filename
+        )
+
+    except ProductoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except HTTPException:
+        raise  # Re-lanzar excepciones HTTP ya creadas
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al subir la imagen: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{producto_id}/imagen",
+    response_model=ProductoImagenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Eliminar imagen de producto",
+    description="Elimina la imagen asociada a un producto.",
+)
+async def delete_producto_imagen(
+    producto_id: str,
+    session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
+) -> ProductoImagenResponse:
+    """
+    Elimina la imagen asociada a un producto.
+
+    Args:
+        producto_id: ID del producto (ULID).
+        session: Sesión de base de datos.
+        current_admin: Usuario administrador autenticado.
+
+    Returns:
+        Confirmación de eliminación.
+
+    Raises:
+        HTTPException:
+            - 401: Si no está autenticado como administrador.
+            - 404: Si el producto o la imagen no existen.
+            - 500: Si ocurre un error al eliminar.
+    """
+    if current_admin is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Se requiere autenticación de administrador"
+        )
+
+    try:
+        producto_service = ProductoService(session)
+        producto = await producto_service.repository.get_by_id(producto_id)
+        
+        if not producto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se encontró el producto con ID {producto_id}"
+            )
+
+        deleted = ProductoImagenService.delete_producto_image(producto_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró ninguna imagen para este producto"
+            )
+
+        # Actualizar imagen_path a None directamente en el repositorio
+        await producto_service.repository.update(producto_id, imagen_path=None)
+
+        return ProductoImagenResponse(
+            message="Imagen eliminada exitosamente",
+            producto_id=producto_id,
+            imagen_path=None,
+            filename=None
+        )
+
+    except ProductoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except HTTPException:
+        raise  # Re-lanzar excepciones HTTP ya creadas
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar la imagen: {str(e)}"
+        )
+
+
+@router.put(
+    "/{producto_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=ProductoConOpcionesResponse,
+    summary="Actualizar producto",
+    description="Actualiza un producto con todos sus datos: alérgenos, secciones, tipos de opciones y opciones.",
+)
+async def update_producto(
     producto_id: str,
     producto_data: ProductoCompletoUpdateSchema,
     session: AsyncSession = Depends(get_database_session),
-) -> ProductoConOpcionesResponse:
+    current_admin = Depends(get_current_admin)
+):
     """
     Actualiza completamente un producto con todos sus datos relacionados.
 
@@ -478,95 +599,32 @@ async def update_producto_completo(
             - 409: Si hay conflictos (ej. nombre duplicado).
             - 500: Si ocurre un error interno del servidor.
     """
+    if current_admin is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales inválidas para realizar esta operación.",
+        )
+
     try:
         producto_service = ProductoService(session)
-        return await producto_service.update_producto_completo(producto_id, producto_data)
+        resultado = await producto_service.update_producto_completo(producto_id, producto_data)
+        
+        # Commit de la transacción si todo salió bien
+        await session.commit()
+        
+        return resultado
     except ProductoValidationError as e:
+        await session.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ProductoNotFoundError as e:
+        await session.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ProductoConflictError as e:
+        await session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except Exception as e:
+        await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}",
-        )
-
-
-
-@router.put(
-    "/{producto_id}/imagen",
-    status_code=status.HTTP_200_OK,
-    summary="Actualizar imagen de producto",
-    description="Sube/actualiza la imagen de un producto. Reemplaza imagen existente si la hay.",
-)
-async def update_producto_imagen(
-    producto_id: str,
-    file: UploadFile = File(...),
-    session: AsyncSession = Depends(get_database_session),
-):
-    """Actualiza la imagen de un producto."""
-    from pathlib import Path
-    import aiofiles
-    from ulid import ULID
-    import os
-    from src.core.storage_config import (
-        PRODUCTOS_IMAGES_DIR,
-        ALLOWED_IMAGE_EXTENSIONS,
-        MAX_IMAGE_SIZE
-    )
-
-    try:
-        producto_service = ProductoService(session)
-        producto_actual = await producto_service.get_producto_by_id(producto_id)
-
-        if not file.filename:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El archivo no tiene un nombre válido"
-            )
-
-        file_ext = Path(file.filename).suffix.lower()
-        if file_ext not in ALLOWED_IMAGE_EXTENSIONS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tipo de archivo no permitido. Use: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
-            )
-
-        contents = await file.read()
-        if len(contents) > MAX_IMAGE_SIZE:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Archivo muy grande. Máximo: {MAX_IMAGE_SIZE / 1024 / 1024}MB"
-            )
-
-        nuevo_filename = f"{str(ULID())}{file_ext}"
-        nuevo_file_path = PRODUCTOS_IMAGES_DIR / nuevo_filename
-
-        async with aiofiles.open(nuevo_file_path, "wb") as f:
-            await f.write(contents)
-
-        imagen_antigua = producto_actual.imagen_path
-        if imagen_antigua and imagen_antigua.startswith("/static/"):
-            archivo_antiguo_path = Path(imagen_antigua.lstrip("/"))
-            if archivo_antiguo_path.exists():
-                try:
-                    os.remove(archivo_antiguo_path)
-                except Exception as e:
-                    print(f"Warning: No se pudo eliminar imagen antigua: {e}")
-
-        nueva_ruta = f"/static/images/productos/{nuevo_filename}"
-        await producto_service.repository.update(producto_id, imagen_path=nueva_ruta)
-
-        return {"imagen_path": nueva_ruta, "mensaje": "Imagen actualizada correctamente"}
-
-    except ProductoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al actualizar imagen: {str(e)}"
         )

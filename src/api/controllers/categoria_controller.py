@@ -13,15 +13,16 @@ from src.api.schemas.categoria_schema import (
     CategoriaResponse,
     CategoriaUpdate,
     CategoriaList,
+    CategoriaConProductosCardList
 )
 from src.business_logic.exceptions.categoria_exceptions import (
     CategoriaValidationError,
     CategoriaNotFoundError,
     CategoriaConflictError,
 )
+from src.core.auth_dependencies import get_current_admin
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
-
 
 @router.post(
     "",
@@ -35,7 +36,7 @@ async def create_categoria(
 ) -> CategoriaResponse:
     """
     Crea una nueva categoría en el sistema.
-    
+
     Args:
         categoria_data: Datos de la categoría a crear.
         session: Sesión de base de datos.
@@ -224,6 +225,33 @@ async def delete_categoria(
         # lanza CategoriaNotFoundError si no encuentra la categoría
     except CategoriaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+@router.get(
+    "/productos/cards",
+    response_model=CategoriaConProductosCardList,
+    status_code=status.HTTP_200_OK,
+    summary="Listar categorías con productos (Cards)",
+    description="Obtiene categorías activas incluyendo sus productos.",
+)
+async def get_categorias_con_productos_cards(
+    skip: int = Query(0, ge=0, description="Número de registros a omitir (paginación)"),
+    limit: int = Query(
+        100, gt=0, le=500, description="Número máximo de registros a retornar"
+    ),
+    session: AsyncSession = Depends(get_database_session),
+    current_admin = Depends(get_current_admin)
+) -> CategoriaConProductosCardList:
+    """
+    Obtiene el menú visual (categorías + productos minimal).
+    """
+    try:
+        categoria_service = CategoriaService(session)
+        return await categoria_service.get_categorias_con_productos_cards(skip, limit)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

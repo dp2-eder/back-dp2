@@ -245,3 +245,8 @@ class SesionMesaModel(BaseModel, AuditMixin):
 
     def __repr__(self):
         return f"<SesionMesa(id={self.id}, token={self.token_sesion}, mesa={self.id_mesa}, estado={self.estado.value})>"
+
+    @property
+    def numero_mesa(self) -> Optional[str]:
+        """Propiedad para exponer el número de mesa en los esquemas de Pydantic"""
+        return self.mesa.numero if self.mesa else None

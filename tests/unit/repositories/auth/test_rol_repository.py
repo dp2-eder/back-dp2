@@ -57,6 +57,7 @@ class TestRolRepository:
     async def test_create_rol(self, rol_repository, mock_session, rol_comensal):
         """Test que crea un rol exitosamente."""
         # Mock de la sesión
+        mock_session.add = MagicMock()
         mock_session.flush = AsyncMock()
         mock_session.commit = AsyncMock()
         mock_session.refresh = AsyncMock()

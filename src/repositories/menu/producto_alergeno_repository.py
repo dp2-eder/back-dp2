@@ -6,6 +6,7 @@ from typing import Optional, List, Tuple
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy import select, delete, update, func
 
 from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
@@ -66,7 +67,7 @@ class ProductoAlergenoRepository:
 
     async def get_by_id(self, id: str) -> Optional[ProductoAlergenoModel]:
         """
-        Obtiene una relación producto-alérgeno por su ID simple (ULID).
+        Obtiene una relación producto-alérgeno por su ID con relaciones cargadas.
 
         Parameters
         ----------
@@ -76,10 +77,15 @@ class ProductoAlergenoRepository:
         Returns
         -------
         Optional[ProductoAlergenoModel]
-            La relación encontrada o None si no existe.
+            La relación encontrada con producto y alérgeno cargados, o None si no existe.
         """
-        query = select(ProductoAlergenoModel).where(
-            ProductoAlergenoModel.id == id
+        query = (
+            select(ProductoAlergenoModel)
+            .where(ProductoAlergenoModel.id == id)
+            .options(
+                selectinload(ProductoAlergenoModel.producto),
+                selectinload(ProductoAlergenoModel.alergeno)
+            )
         )
         result = await self.session.execute(query)
         return result.scalars().first()
@@ -88,9 +94,7 @@ class ProductoAlergenoRepository:
         self, id_producto: str, id_alergeno: str
     ) -> Optional[ProductoAlergenoModel]:
         """
-        Obtiene una relación producto-alérgeno por su combinación (backward compatibility).
-
-        LEGACY METHOD: Usar get_by_id() para nuevas implementaciones.
+        Obtiene una relación por combinación producto-alérgeno con relaciones cargadas.
 
         Parameters
         ----------
@@ -102,11 +106,18 @@ class ProductoAlergenoRepository:
         Returns
         -------
         Optional[ProductoAlergenoModel]
-            La relación encontrada o None si no existe.
+            La relación encontrada con producto y alérgeno cargados, o None si no existe.
         """
-        query = select(ProductoAlergenoModel).where(
-            ProductoAlergenoModel.id_producto == id_producto,
-            ProductoAlergenoModel.id_alergeno == id_alergeno
+        query = (
+            select(ProductoAlergenoModel)
+            .where(
+                ProductoAlergenoModel.id_producto == id_producto,
+                ProductoAlergenoModel.id_alergeno == id_alergeno
+            )
+            .options(
+                selectinload(ProductoAlergenoModel.producto),
+                selectinload(ProductoAlergenoModel.alergeno)
+            )
         )
         result = await self.session.execute(query)
         return result.scalars().first()
@@ -141,25 +152,19 @@ class ProductoAlergenoRepository:
             await self.session.rollback()
             raise
 
-    async def delete_by_producto_alergeno(
-        self, id_producto: str, id_alergeno: str
-    ) -> bool:
+    async def delete_by_producto(self, id_producto: str) -> int:
         """
-        Elimina una relación por combinación producto-alérgeno (backward compatibility).
-
-        LEGACY METHOD: Usar delete() para nuevas implementaciones.
+        Elimina todas las relaciones de alérgenos de un producto.
 
         Parameters
         ----------
         id_producto : str
             Identificador único del producto.
-        id_alergeno : str
-            Identificador único del alérgeno.
 
         Returns
         -------
-        bool
-            True si la relación fue eliminada, False si no existía.
+        int
+            Número de relaciones eliminadas.
 
         Raises
         ------
@@ -168,12 +173,11 @@ class ProductoAlergenoRepository:
         """
         try:
             stmt = delete(ProductoAlergenoModel).where(
-                ProductoAlergenoModel.id_producto == id_producto,
-                ProductoAlergenoModel.id_alergeno == id_alergeno
+                ProductoAlergenoModel.id_producto == id_producto
             )
             result = await self.session.execute(stmt)
             await self.session.commit()
-            return result.rowcount > 0
+            return result.rowcount
         except SQLAlchemyError:
             await self.session.rollback()
             raise
@@ -187,12 +191,12 @@ class ProductoAlergenoRepository:
         id : str
             Identificador único ULID de la relación.
         **kwargs
-            Campos y valores a actualizar.
+            Campos y valores a actualizar (nivel_presencia, notas, activo).
 
         Returns
         -------
         Optional[ProductoAlergenoModel]
-            La relación actualizada o None si no existe.
+            La relación actualizada con relaciones cargadas, o None si no existe.
 
         Raises
         ------
@@ -200,107 +204,28 @@ class ProductoAlergenoRepository:
             Si ocurre un error durante la operación en la base de datos.
         """
         try:
-            # Filtrar solo los campos que pertenecen al modelo
-            # Excluir las claves primarias (id, id_producto, id_alergeno)
+            # Filtrar solo los campos editables
             valid_fields = {
                 k: v for k, v in kwargs.items()
                 if hasattr(ProductoAlergenoModel, k) and k not in ("id", "id_producto", "id_alergeno")
             }
 
             if not valid_fields:
-                # No hay campos válidos para actualizar
                 return await self.get_by_id(id)
 
-            # Construir y ejecutar la sentencia de actualización
             stmt = (
                 update(ProductoAlergenoModel)
                 .where(ProductoAlergenoModel.id == id)
                 .values(**valid_fields)
-                .returning(ProductoAlergenoModel)
             )
 
             result = await self.session.execute(stmt)
             await self.session.commit()
 
-            # Obtener el resultado actualizado
-            updated_producto_alergeno = result.scalars().first()
-
-            # Si no se encontró la relación, retornar None
-            if not updated_producto_alergeno:
+            if result.rowcount == 0:
                 return None
 
-            # Refrescar el objeto desde la base de datos
-            await self.session.refresh(updated_producto_alergeno)
-
-            return updated_producto_alergeno
-        except SQLAlchemyError:
-            await self.session.rollback()
-            raise
-
-    async def update_by_producto_alergeno(
-        self, id_producto: str, id_alergeno: str, **kwargs
-    ) -> Optional[ProductoAlergenoModel]:
-        """
-        Actualiza una relación por combinación producto-alérgeno (backward compatibility).
-
-        LEGACY METHOD: Usar update() para nuevas implementaciones.
-
-        Parameters
-        ----------
-        id_producto : str
-            Identificador único del producto.
-        id_alergeno : str
-            Identificador único del alérgeno.
-        **kwargs
-            Campos y valores a actualizar.
-
-        Returns
-        -------
-        Optional[ProductoAlergenoModel]
-            La relación actualizada o None si no existe.
-
-        Raises
-        ------
-        SQLAlchemyError
-            Si ocurre un error durante la operación en la base de datos.
-        """
-        try:
-            # Filtrar solo los campos que pertenecen al modelo
-            # Excluir las claves primarias
-            valid_fields = {
-                k: v for k, v in kwargs.items()
-                if hasattr(ProductoAlergenoModel, k) and k not in ("id", "id_producto", "id_alergeno")
-            }
-
-            if not valid_fields:
-                # No hay campos válidos para actualizar
-                return await self.get_by_producto_alergeno(id_producto, id_alergeno)
-
-            # Construir y ejecutar la sentencia de actualización
-            stmt = (
-                update(ProductoAlergenoModel)
-                .where(
-                    ProductoAlergenoModel.id_producto == id_producto,
-                    ProductoAlergenoModel.id_alergeno == id_alergeno
-                )
-                .values(**valid_fields)
-                .returning(ProductoAlergenoModel)
-            )
-
-            result = await self.session.execute(stmt)
-            await self.session.commit()
-
-            # Obtener el resultado actualizado
-            updated_producto_alergeno = result.scalars().first()
-
-            # Si no se encontró la relación, retornar None
-            if not updated_producto_alergeno:
-                return None
-
-            # Refrescar el objeto desde la base de datos
-            await self.session.refresh(updated_producto_alergeno)
-
-            return updated_producto_alergeno
+            return await self.get_by_id(id)
         except SQLAlchemyError:
             await self.session.rollback()
             raise
@@ -309,7 +234,7 @@ class ProductoAlergenoRepository:
         self, skip: int = 0, limit: int = 100
     ) -> Tuple[List[ProductoAlergenoModel], int]:
         """
-        Obtiene una lista paginada de relaciones producto-alérgeno y el total de registros.
+        Obtiene una lista paginada de relaciones producto-alérgeno con relaciones cargadas.
 
         Parameters
         ----------
@@ -323,25 +248,27 @@ class ProductoAlergenoRepository:
         Tuple[List[ProductoAlergenoModel], int]
             Tupla con la lista de relaciones y el número total de registros.
         """
-        # Consulta para obtener las relaciones paginadas
-        query = select(ProductoAlergenoModel).offset(skip).limit(limit)
+        query = (
+            select(ProductoAlergenoModel)
+            .options(
+                selectinload(ProductoAlergenoModel.producto),
+                selectinload(ProductoAlergenoModel.alergeno)
+            )
+            .offset(skip)
+            .limit(limit)
+        )
 
-        # Consulta para obtener el total de registros
         count_query = select(func.count()).select_from(ProductoAlergenoModel)
 
         try:
-            # Ejecutar ambas consultas
             result = await self.session.execute(query)
             count_result = await self.session.execute(count_query)
 
-            # Obtener los resultados
             producto_alergenos = result.scalars().all()
             total = count_result.scalar() or 0
 
             return list(producto_alergenos), total
         except SQLAlchemyError:
-            # En caso de error, no es necesario hacer rollback aquí
-            # porque no estamos modificando datos
             raise
 
     async def get_by_producto(
@@ -350,7 +277,7 @@ class ProductoAlergenoRepository:
         solo_activos: bool = True
     ) -> List[ProductoAlergenoModel]:
         """
-        Obtiene todos los alérgenos asociados a un producto específico.
+        Obtiene todas las relaciones producto-alérgeno de un producto con alérgenos cargados.
 
         Parameters
         ----------
@@ -362,10 +289,12 @@ class ProductoAlergenoRepository:
         Returns
         -------
         List[ProductoAlergenoModel]
-            Lista de relaciones producto-alérgeno para el producto especificado.
+            Lista de relaciones producto-alérgeno con alérgenos cargados.
         """
-        query = select(ProductoAlergenoModel).where(
-            ProductoAlergenoModel.id_producto == id_producto
+        query = (
+            select(ProductoAlergenoModel)
+            .where(ProductoAlergenoModel.id_producto == id_producto)
+            .options(selectinload(ProductoAlergenoModel.alergeno))
         )
 
         if solo_activos:
@@ -374,80 +303,73 @@ class ProductoAlergenoRepository:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_alergenos_by_producto(
+    async def get_by_alergeno(
         self,
-        id_producto: str,
+        id_alergeno: str,
         solo_activos: bool = True
-    ) -> List:
+    ) -> List[ProductoAlergenoModel]:
         """
-        Obtiene todos los alérgenos asociados a un producto específico con JOIN.
-
-        Parameters
-        ----------
-        id_producto : str
-            Identificador único del producto (ULID).
-        solo_activos : bool, optional
-            Si True, solo retorna alérgenos activos. Por defecto True.
-
-        Returns
-        -------
-        List[AlergenoModel]
-            Lista directa de alérgenos asociados al producto.
-        """
-        from src.models.menu.alergeno_model import AlergenoModel
-
-        query = (
-            select(AlergenoModel)
-            .join(ProductoAlergenoModel, AlergenoModel.id == ProductoAlergenoModel.id_alergeno)
-            .where(ProductoAlergenoModel.id_producto == id_producto)
-        )
-
-        if solo_activos:
-            query = query.where(ProductoAlergenoModel.activo == True)
-
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-
-    async def get_alergenos_by_producto(self, id_producto: str) -> List:
-        """
-        Obtiene todos los alérgenos asociados a un producto específico con JOIN.
-
-        Parameters
-        ----------
-        id_producto : str
-            Identificador único del producto (ULID).
-
-        Returns
-        -------
-        List[AlergenoModel]
-            Lista directa de alérgenos asociados al producto.
-        """
-        from src.models.menu.alergeno_model import AlergenoModel
-        
-        query = (
-            select(AlergenoModel)
-            .join(ProductoAlergenoModel, AlergenoModel.id == ProductoAlergenoModel.id_alergeno)
-            .where(ProductoAlergenoModel.id_producto == id_producto)
-        )
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-
-    async def get_by_alergeno(self, id_alergeno: str) -> List[ProductoAlergenoModel]:
-        """
-        Obtiene todos los productos que contienen un alérgeno específico.
+        Obtiene todas las relaciones de productos que contienen un alérgeno específico.
 
         Parameters
         ----------
         id_alergeno : str
             Identificador único del alérgeno.
+        solo_activos : bool, optional
+            Si True, solo retorna relaciones activas. Por defecto True.
 
         Returns
         -------
         List[ProductoAlergenoModel]
-            Lista de relaciones producto-alérgeno para el alérgeno especificado.
+            Lista de relaciones producto-alérgeno con productos cargados.
         """
-        query = select(ProductoAlergenoModel).where(
-            ProductoAlergenoModel.id_alergeno == id_alergeno
+        query = (
+            select(ProductoAlergenoModel)
+            .where(ProductoAlergenoModel.id_alergeno == id_alergeno)
+            .options(selectinload(ProductoAlergenoModel.producto))
         )
+
+        if solo_activos:
+            query = query.where(ProductoAlergenoModel.activo == True)
+
         result = await self.session.execute(query)
         return list(result.scalars().all())
+    
+    async def batch_create(
+        self,
+        relaciones: List[ProductoAlergenoModel]
+    ) -> List[ProductoAlergenoModel]:
+        """
+        Crea múltiples relaciones producto-alérgeno en una sola operación batch.
+
+        Parameters
+        ----------
+        relaciones : List[ProductoAlergenoModel]
+            Lista de relaciones producto-alérgeno a crear.
+
+        Returns
+        -------
+        List[ProductoAlergenoModel]
+            Lista de relaciones creadas con sus IDs generados.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación (ej: violación de unique constraint).
+        """
+        if not relaciones:
+            return []
+
+        try:
+            self.session.add_all(relaciones)
+            await self.session.flush()
+            await self.session.commit()
+            
+            # Refrescar para obtener IDs y relaciones
+            for relacion in relaciones:
+                await self.session.refresh(relacion)
+            
+            return relaciones
+        except SQLAlchemyError:
+            await self.session.rollback()
+            raise

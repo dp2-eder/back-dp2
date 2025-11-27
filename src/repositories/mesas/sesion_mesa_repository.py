@@ -339,7 +339,6 @@ class SesionMesaRepository:
             for key, value in data.items():
                 if hasattr(sesion, key):
                     setattr(sesion, key, value)
-
             await self.session.flush()
             await self.session.commit()
             await self.session.refresh(sesion)
