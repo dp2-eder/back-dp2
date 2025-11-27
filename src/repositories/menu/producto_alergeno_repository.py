@@ -408,6 +408,30 @@ class ProductoAlergenoRepository:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
+    async def get_alergenos_by_producto(self, id_producto: str) -> List:
+        """
+        Obtiene todos los alérgenos asociados a un producto específico con JOIN.
+
+        Parameters
+        ----------
+        id_producto : str
+            Identificador único del producto (ULID).
+
+        Returns
+        -------
+        List[AlergenoModel]
+            Lista directa de alérgenos asociados al producto.
+        """
+        from src.models.menu.alergeno_model import AlergenoModel
+        
+        query = (
+            select(AlergenoModel)
+            .join(ProductoAlergenoModel, AlergenoModel.id == ProductoAlergenoModel.id_alergeno)
+            .where(ProductoAlergenoModel.id_producto == id_producto)
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
     async def get_by_alergeno(self, id_alergeno: str) -> List[ProductoAlergenoModel]:
         """
         Obtiene todos los productos que contienen un alérgeno específico.

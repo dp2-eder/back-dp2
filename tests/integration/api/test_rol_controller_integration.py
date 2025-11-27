@@ -1,5 +1,11 @@
 """
-Pruebas de integración para los endpoints de roles.
+Pruebas de integración para el controlador de roles.
+
+ARCHIVO DESHABILITADO PERMANENTEMENTE
+======================================
+Este archivo de test ha sido deshabilitado porque RolController fue eliminado del sistema.
+
+El nuevo sistema de login simplificado no usa roles.
 """
 
 import pytest
