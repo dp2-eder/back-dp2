@@ -16,21 +16,19 @@ from src.core.app_lifespan import lifespan
 from src.core.router_registry import register_routers
 from src.core.model_registry import register_all_models
 
-# Registrar modelos ANTES de importar controladores
 register_all_models()
-
 logger = logging.getLogger(__name__)
 
 
 def _mount_static_files(app: FastAPI) -> None:
     """Monta los archivos estáticos de la aplicación."""
-    static_dir = Path("app/static/images")
+    static_dir = Path("static/images")
     if static_dir.exists():
         logger.info(f"Directorio estático montado: {static_dir}")
     else:
         logger.warning(f"Directorio estático no encontrado: {static_dir}")
         os.makedirs(static_dir, exist_ok=True)
-    
+
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
@@ -98,7 +96,6 @@ def create_app() -> FastAPI:
     return app
 
 
-# Crear la instancia de la aplicación
 app = create_app()
 
 

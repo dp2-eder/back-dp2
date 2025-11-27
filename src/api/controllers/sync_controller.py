@@ -70,18 +70,14 @@ async def sync_platos(
         categoria_service = CategoriaService(session)
         producto_service = ProductoService(session)
         resultados = {
-            "categorias_creadas": 0,
-            "categorias_actualizadas": 0,
-            "productos_creados": 0,
-            "productos_actualizados": 0,
         }
 
         categorias_to_sync = set([prod.categoria for prod in productos_domotica])
         existing_categorias = await session.execute(
             select(CategoriaModel)
         )
-        existing_map: Dict[str, Any] = {cat.nombre: cat for cat in existing_categorias.scalars().all()}
-        existing_set = set(existing_map.keys())
+        existing_cat_map: Dict[str, Any] = {cat.nombre: cat for cat in existing_categorias.scalars().all()}
+        existing_set = set(existing_cat_map.keys())
 
         categorias_crear = [
             CategoriaCreate(
@@ -95,10 +91,12 @@ async def sync_platos(
         resultados["categorias_creadas"] = len(nuevas_categorias)
         
         for cat in nuevas_categorias:
-            existing_map[cat.nombre] = cat
+            existing_cat_map[cat.nombre.upper()] = cat
+
+        logger.info(f"[SYNC PLATOS] Categorías a crear: {existing_cat_map.keys()}")
 
         categorias_desactivar = [
-            existing_map[cat].id
+            existing_cat_map[cat.upper()].id
             for cat in existing_set
             if cat not in categorias_to_sync
         ]
@@ -107,21 +105,21 @@ async def sync_platos(
         )
 
         categorias_activar = [
-            existing_map[cat].id for cat in existing_set if cat in categorias_to_sync
+            existing_cat_map[cat.upper()].id for cat in existing_set if cat in categorias_to_sync
         ]
         resultados["categorias_activadas"] = (
             await categoria_service.activate_categorias(categorias_activar)
         )
 
         productos_to_sync = {
-            (prod.categoria, prod.nombre): prod for prod in productos_domotica
+            (prod.categoria.upper(), prod.nombre.upper()): prod for prod in productos_domotica
         }
         result = await session.execute(
             select(ProductoModel).options(selectinload(ProductoModel.categoria))
         )
         existing_productos = result.scalars().all()
         existing_prod_map = {
-            (prod.categoria.nombre, prod.nombre): prod for prod in existing_productos
+            (prod.categoria.nombre.upper(), prod.nombre.upper()): prod for prod in existing_productos
         }
         existing_prod_set = set(existing_prod_map.keys())
         productos_crear = [
@@ -129,7 +127,7 @@ async def sync_platos(
                 nombre=prod.nombre,
                 descripcion=f"Producto {prod.nombre} creado desde sincronización",
                 precio_base=Decimal(prod.precio) if prod.precio else Decimal("0.00"),
-                id_categoria=existing_map[prod.categoria].id,
+                id_categoria=existing_cat_map[prod.categoria.upper()].id,
             )
             for key, prod in productos_to_sync.items()
             if key not in existing_prod_set and prod.nombre.strip() != ""
