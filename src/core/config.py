@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     email_from: Optional[str] = None
 
+    # RabbitMQ configuration
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    rabbitmq_user: str = "prod_user"
+    rabbitmq_password: str = "prod_password"
+    rabbitmq_vhost: str = "prod_vhost"
+    rabbitmq_queue: str = "domotica_queue"
+    rabbitmq_exchange: str = "domotica_exchange"
+    rabbitmq_routing_key: str = "task.created"
+
     # WebSocket
     ws_heartbeat_interval: int = 30
 
