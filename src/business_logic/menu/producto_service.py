@@ -162,6 +162,12 @@ class ProductoService:
             for tipo in tipos_list
         ]
 
+        # Repositorios adicionales para actualización completa
+        from src.repositories.menu.producto_alergeno_repository import ProductoAlergenoRepository
+        from src.repositories.pedidos.producto_opcion_repository import ProductoOpcionRepository
+        self.producto_alergeno_repository = ProductoAlergenoRepository(session)
+        self.producto_opcion_repository = ProductoOpcionRepository(session)
+
     async def create_producto(self, producto_data: ProductoCreate) -> ProductoResponse:
         """
         Crea un nuevo producto en el sistema.

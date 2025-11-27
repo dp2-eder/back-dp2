@@ -23,12 +23,10 @@ async def test_update_producto_completo_integration(
         - El cliente asincrónico (async_client) debe estar configurado
         - La sesión de base de datos (db_session) debe estar disponible y en estado limpio
         - Los modelos necesarios deben ser accesibles
-
     PROCESO:
         - Crea categoría, alérgenos y producto en la base de datos.
         - Envía una solicitud PUT al endpoint con datos completos.
         - Verifica la respuesta y el estado en la base de datos.
-
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 200 (OK)
         - Los datos del producto deben actualizarse correctamente
@@ -131,7 +129,6 @@ async def test_update_producto_completo_not_found_integration(
         - Genera un ID de producto que no existe.
         - Envía una solicitud PUT al endpoint.
         - Verifica que se retorne el código de error apropiado.
-
     POSTCONDICIONES:
         - La respuesta debe tener código HTTP 404 (Not Found)
         - El mensaje de error debe indicar que no se encontró el producto

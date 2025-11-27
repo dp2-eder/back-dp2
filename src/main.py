@@ -213,7 +213,7 @@ def register_routers(app: FastAPI) -> None:
     ]
 
     # Prefijo API común para todas las rutas
-    api_prefix = "/api/v1"
+    api_prefix = "/v1"
 
     for module_name, tag in controllers:
         try:
@@ -255,6 +255,7 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         debug=settings.debug,
         lifespan=lifespan,
+        root_path="/api",
     )
 
     # Montar archivos estáticos para imágenes

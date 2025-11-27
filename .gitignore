@@ -139,4 +139,6 @@ logs/
 *.temp
 
 
-.claude
+
+# Private configuration files
+.commit-rules
