@@ -91,6 +91,9 @@ class ProductoDomotica(BaseModel):
 
     precio: str
     """Precio del producto en moneda local (formato string desde el scraping)"""
+    
+    comentario: Optional[str] = None
+    """Comentario u observación específica para este producto"""
 
     model_config = {
         "json_schema_extra": {
@@ -100,6 +103,7 @@ class ProductoDomotica(BaseModel):
                     "nombre": "Lomo Saltado",
                     "stock": "15",
                     "precio": "25.50",
+                    "comentario": "Sin cebolla por favor"
                 }
             ]
         }
@@ -244,7 +248,8 @@ class PlatoInsertRequest(BaseModel):
                         "categoria": "CEVICHES",
                         "nombre": "CEVICHE NORTENO",
                         "stock": "1",
-                        "precio": "35.00"
+                        "precio": "35.00",
+                        "comentario": "COMENTARIO DEL PEDIDO1"
                     },
                     {
                         "categoria": "PIQUEOS",
@@ -256,7 +261,8 @@ class PlatoInsertRequest(BaseModel):
                         "categoria": "BEBIDAS CON ALCOHOL",
                         "nombre": "PILSEN CALLAO 630ML",
                         "stock": "22",
-                        "precio": "13.00"
+                        "precio": "13.00",
+                        "comentario": "COMENTARIO DEL PEDIDO3"
                     }
                 ],
                 "comprobante": {

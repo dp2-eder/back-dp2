@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     rabbitmq_queue: str = "domotica_queue"
     rabbitmq_exchange: str = "domotica_exchange"
     rabbitmq_routing_key: str = "task.created"
+    rabbitmq_screenshot_exchange: str = "domotica_exchange_screenshot"
+    rabbitmq_screenshot_queue: str = "domotica_queue_screenshot"
 
     # WebSocket
     ws_heartbeat_interval: int = 30

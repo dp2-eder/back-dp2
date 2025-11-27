@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from src.core.database import create_tables, close_database
 from src.core.logging import configure_logging
+from src.business_logic.notifications.rabbitmq_service import get_rabbitmq_service, close_rabbitmq_service
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,13 @@ async def lifespan(app: FastAPI):
     configure_logging()
     _ensure_static_directories()
     await _initialize_database()
+
+    # Iniciar RabbitMQ y consumidor
+    try:
+        rabbitmq = await get_rabbitmq_service()
+        await rabbitmq.start_screenshot_consumer()
+    except Exception as e:
+        logger.error(f"Error al iniciar RabbitMQ: {e}")
     
     logger.info("Restaurant Backend API iniciada correctamente")
 
@@ -59,6 +67,7 @@ async def lifespan(app: FastAPI):
     # ========== Limpieza ==========
     logger.info("Cerrando Restaurant Backend API...")
     
+    await close_rabbitmq_service()
     await close_database()
     
     logger.info("Recursos liberados correctamente")

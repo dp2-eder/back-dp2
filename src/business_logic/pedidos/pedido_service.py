@@ -807,11 +807,29 @@ class PedidoService:
                                     cat_nombre = categoria.nombre
                                     categoria_cache[producto.id_categoria] = cat_nombre
                             
+                            # Construir comentario con notas y opciones
+                            comentarios_parts = []
+                            if item_data.notas_personalizacion:
+                                comentarios_parts.append(f"Nota: {item_data.notas_personalizacion}")
+                            
+                            if item_data.opciones:
+                                nombres_opciones = []
+                                for op in item_data.opciones:
+                                    opcion_obj = await self.producto_opcion_repository.get_by_id(op.id_producto_opcion)
+                                    if opcion_obj:
+                                        nombres_opciones.append(opcion_obj.nombre)
+                                
+                                if nombres_opciones:
+                                    comentarios_parts.append(f"Opciones: {', '.join(nombres_opciones)}")
+                            
+                            comentario_final = " | ".join(comentarios_parts) if comentarios_parts else None
+
                             plato = ProductoDomotica(
                                 categoria=cat_nombre,
                                 nombre=producto.nombre,
                                 stock=str(item_data.cantidad), # Usamos la cantidad del pedido como "stock" a insertar
-                                precio=str(producto.precio_base)
+                                precio=str(producto.precio_base),
+                                comentario=comentario_final
                             )
                             platos_domotica.append(plato)
 
@@ -1090,11 +1108,24 @@ class PedidoService:
                                 cat_nombre = categoria.nombre
                                 categoria_cache[producto.id_categoria] = cat_nombre
                         
+                        # Construir comentario con notas y opciones
+                        comentarios_parts = []
+                        if item.notas_personalizacion:
+                            comentarios_parts.append(f"Nota: {item.notas_personalizacion}")
+                        
+                        opciones_item = item_data.get("opciones", [])
+                        if opciones_item:
+                            nombres_opciones = [op.nombre for op in opciones_item]
+                            comentarios_parts.append(f"Opciones: {', '.join(nombres_opciones)}")
+                        
+                        comentario_final = " | ".join(comentarios_parts) if comentarios_parts else None
+
                         plato = ProductoDomotica(
                             categoria=cat_nombre,
                             nombre=producto.nombre,
                             stock=str(item.cantidad),
-                            precio=str(producto.precio_base)
+                            precio=str(producto.precio_base),
+                            comentario=comentario_final
                         )
                         platos_domotica.append(plato)
 

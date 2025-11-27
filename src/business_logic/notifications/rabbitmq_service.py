@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, Optional
 import aio_pika
 from aio_pika import Message, DeliveryMode, connect_robust
-from aio_pika.abc import AbstractRobustConnection, AbstractChannel
+from aio_pika.abc import AbstractRobustConnection, AbstractChannel, AbstractIncomingMessage
 
 
 from src.core.config import get_settings
@@ -307,6 +307,61 @@ class RabbitMQService:
             routing_key="task.sync",
             priority=5
         )
+
+    async def start_screenshot_consumer(self) -> None:
+        """Inicia el consumidor de screenshots."""
+        if not self._is_connected or not self.channel:
+            logger.error("No hay conexión activa con RabbitMQ para iniciar consumidor")
+            return
+
+        try:
+            # Declarar exchange de screenshots
+            exchange = await self.channel.declare_exchange(
+                settings.rabbitmq_screenshot_exchange,
+                type="fanout",
+                durable=True
+            )
+            
+            # Declarar cola de screenshots
+            queue = await self.channel.declare_queue(
+                settings.rabbitmq_screenshot_queue,
+                durable=True
+            )
+            
+            # Bind queue to exchange
+            await queue.bind(exchange)
+            
+            async def process_message(message: AbstractIncomingMessage):
+                async with message.process():
+                    try:
+                        body = message.body.decode()
+                        # Parsear JSON para obtener el screenshot
+                        data = json.loads(body)
+                        logger.info("Mensaje de screenshot recibido")
+                        logger.debug(f"Contenido del mensaje: {data}")
+                        screenshot_base64 = data.get("screenshot")
+                        
+                        if not screenshot_base64:
+                            logger.warning("Mensaje recibido sin campo 'screenshot'")
+                            return
+
+                        # Importación local para evitar ciclos
+                        from src.business_logic.menu.imagen_service import ImagenService
+                        
+                        filename = await ImagenService.save_screenshot_from_base64(screenshot_base64)
+                        logger.info(f"Screenshot guardado: {filename}")
+                        
+                    except json.JSONDecodeError:
+                        logger.error("Error al decodificar mensaje JSON de screenshot")
+                    except Exception as e:
+                        logger.error(f"Error procesando screenshot: {e}")
+
+            # Iniciar consumo
+            await queue.consume(process_message)
+            logger.info("Consumidor de screenshots iniciado")
+            
+        except Exception as e:
+            logger.error(f"Error al iniciar consumidor de screenshots: {str(e)}")
 
     @property
     def is_connected(self) -> bool:

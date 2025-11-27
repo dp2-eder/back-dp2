@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import UploadFile, HTTPException, status
 from PIL import Image
 import io
+import base64
+from ulid import ULID
 
 from src.core.config import get_settings, Settings
 settings: Settings = get_settings()
@@ -108,3 +110,54 @@ class ImagenService:
     async def save_categoria_image(cls, categoria_id: str, file: UploadFile) -> str:
         """Guarda y optimiza imagen de la categoría. Siempre guarda como JPG."""
         return await cls.save_image(categoria_id, file, prefix="categoria_")
+
+    @classmethod
+    async def save_screenshot_from_base64(cls, base64_string: str) -> str:
+        """
+        Guarda una imagen recibida en base64 como archivo JPG.
+        
+        Parameters
+        ----------
+        base64_string : str
+            Cadena base64 de la imagen
+            
+        Returns
+        -------
+        str
+            Nombre del archivo guardado
+        """
+        cls.ensure_directory_exists()
+        
+        try:
+            # Limpiar prefijo data URI si existe (ej: data:image/png;base64,)
+            if "," in base64_string:
+                base64_string = base64_string.split(",")[1]
+                
+            # Decodificar base64
+            image_data = base64.b64decode(base64_string)
+            
+            # Generar nombre único
+            code = str(ULID())
+            filename = f"domotica_{code}.jpg"
+            filepath = cls.STATIC_DIR / filename
+            
+            # Procesar y guardar imagen
+            image = Image.open(io.BytesIO(image_data))
+            if image.mode != "RGB":
+                if image.mode == "RGBA":
+                    background = Image.new("RGB", image.size, (255, 255, 255))
+                    background.paste(image, mask=image.split()[3])
+                    image = background
+                else:
+                    image = image.convert("RGB")
+            
+            # Opcional: Redimensionar si es muy grande
+            if image.size[0] > cls.MAX_DIMENSIONS[0] or image.size[1] > cls.MAX_DIMENSIONS[1]:
+                image.thumbnail(cls.MAX_DIMENSIONS, Image.Resampling.LANCZOS)
+                
+            image.save(filepath, format="JPEG", quality=85, optimize=True)
+            
+            return filename
+            
+        except Exception as e:
+            raise ValueError(f"Error al guardar screenshot: {str(e)}")
