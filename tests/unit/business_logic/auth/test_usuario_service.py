@@ -113,8 +113,9 @@ class TestUsuarioServiceRegister:
         service, mock_user_repo, mock_rol_repo = usuario_service
         
         # Mocks
-        mock_rol_repo.get_by_nombre.return_value = rol_comensal
         mock_user_repo.get_by_email.return_value = None
+        mock_rol_repo.get_default.return_value = rol_comensal  # Mock get_default
+        
         mock_user_repo.create.return_value = UsuarioModel(
             id=str(ULID()),
             email=register_request_comensal.email,
@@ -135,13 +136,13 @@ class TestUsuarioServiceRegister:
         assert result.code == "SUCCESS"
         assert result.usuario.email == register_request_comensal.email
         
-        # Verificar que se buscó el rol COMENSAL
-        mock_rol_repo.get_by_nombre.assert_called_once_with("COMENSAL")
-        
         # Verificar que se creó el usuario con el rol correcto
         mock_user_repo.create.assert_called_once()
         call_args = mock_user_repo.create.call_args[0][0]
         assert call_args.id_rol == rol_comensal.id
+        
+        # Verificar que se llamó a get_default
+        mock_rol_repo.get_default.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_register_con_rol_especifico(
@@ -180,7 +181,7 @@ class TestUsuarioServiceRegister:
         
         # Verificar que se buscó el rol por ID (no por nombre)
         mock_rol_repo.get_by_id.assert_called_once_with(register_request_con_rol.id_rol)
-        mock_rol_repo.get_by_nombre.assert_not_called()
+        mock_rol_repo.get_default.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_register_error_rol_comensal_no_existe(
@@ -190,14 +191,14 @@ class TestUsuarioServiceRegister:
         service, mock_user_repo, mock_rol_repo = usuario_service
         
         # Mocks
-        mock_rol_repo.get_by_nombre.return_value = None
+        mock_rol_repo.get_default.return_value = None
         
         # Ejecutar y verificar excepción
         with pytest.raises(UsuarioValidationError) as exc_info:
             await service.register(register_request_comensal)
         
-        assert "El rol por defecto 'COMENSAL' no existe" in str(exc_info.value)
-        mock_rol_repo.get_by_nombre.assert_called_once_with("COMENSAL")
+        assert "No existe un rol por defecto" in str(exc_info.value)
+        mock_rol_repo.get_default.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_register_error_rol_especifico_no_existe(

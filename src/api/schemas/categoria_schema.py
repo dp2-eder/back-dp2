@@ -6,6 +6,7 @@ from typing import Optional, ClassVar, List
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
+
 class CategoriaBase(BaseModel):
     """Base schema for Categoria."""
 
@@ -13,12 +14,10 @@ class CategoriaBase(BaseModel):
     descripcion: Optional[str] = Field(
         default=None,
         description="Category description",
-        max_length=1000  # Límite razonable para Text
+        max_length=1000,  # Límite razonable para Text
     )
     imagen_path: Optional[str] = Field(
-        default=None,
-        description="Category image path",
-        max_length=255
+        default=None, description="Category image path", max_length=255
     )
 
 
@@ -31,23 +30,12 @@ class CategoriaCreate(CategoriaBase):
 class CategoriaUpdate(BaseModel):
     """Schema for updating categoria."""
 
-    nombre: Optional[str] = Field(
-        default=None,
-        description="Category name",
-        min_length=1,
-        max_length=100
-    )
     descripcion: Optional[str] = Field(
-        default=None,
-        description="Category description",
-        max_length=1000
+        default=None, description="Category description", max_length=1000
     )
     imagen_path: Optional[str] = Field(
-        default=None,
-        description="Category image path",
-        max_length=255
+        default=None, description="Category image path", max_length=255
     )
-    # NOTA: activo se maneja por endpoint separado (como en rol_schema)
 
 
 class CategoriaResponse(CategoriaBase):
@@ -86,6 +74,7 @@ class CategoriaList(BaseModel):
 
 # ===== SCHEMAS PARA CARDS (SOLO ID, NOMBRE, IMAGEN) =====
 
+
 class ProductoCardMinimal(BaseModel):
     """Schema minimal para producto (solo ID, nombre, imagen)."""
 
@@ -104,7 +93,9 @@ class CategoriaConProductosCard(BaseModel):
     id: str = Field(description="Category ID")
     nombre: str = Field(description="Category name")
     imagen_path: Optional[str] = Field(default=None, description="Category image path")
-    productos: List[ProductoCardMinimal] = Field(default_factory=list, description="Products in this category")
+    productos: List[ProductoCardMinimal] = Field(
+        default_factory=list, description="Products in this category"
+    )
 
 
 class CategoriaConProductosCardList(BaseModel):
@@ -112,3 +103,18 @@ class CategoriaConProductosCardList(BaseModel):
 
     items: List[CategoriaConProductosCard]
     total: int = Field(description="Total number of categories")
+
+
+class CategoriaImagenResponse(BaseModel):
+    """Schema para respuesta de operaciones con imágenes de categorías."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+    message: str = Field(description="Mensaje de confirmación")
+    categoria_id: str = Field(description="ID de la categoría")
+    imagen_path: Optional[str] = Field(
+        default=None, description="Ruta de la imagen (nombre del archivo)"
+    )
+    filename: Optional[str] = Field(
+        default=None, description="Nombre original del archivo subido"
+    )

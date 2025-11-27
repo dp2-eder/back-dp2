@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     # File uploads
     max_file_size: int = 10485760  # 10MB
     upload_dir: str = "uploads"
+    static_dir: str = "static"
+    images_dir: str = "images"
     allowed_extensions: List[str] = ["jpg", "jpeg", "png", "gif", "webp"]
 
     # Email configuration (optional)

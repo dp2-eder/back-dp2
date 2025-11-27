@@ -1,6 +1,4 @@
-"""
-Global fixtures for all tests.
-"""
+"""Global fixtures for all tests."""
 
 import pytest
 import asyncio
@@ -11,25 +9,31 @@ from datetime import datetime
 from faker import Faker
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, AsyncMock
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+    AsyncEngine
+)
 
 from src.main import app
-from src.core.database import get_database_session as get_db, DatabaseManager
+from src.core.database import get_database_session as get_db
 from src.models.base_model import BaseModel as Base
 from src.models.auth.admin_model import AdminModel
 from src.core.security import security
+from src.core.model_registry import register_all_models
 
-# Importar TODOS los modelos al inicio para registrarlos con SQLAlchemy
-# Esto es necesario para que los tests unitarios que instancian modelos directamente funcionen
-from src.models.pagos.division_cuenta_model import DivisionCuentaModel  # noqa: F401
-from src.models.pagos.division_cuenta_detalle_model import DivisionCuentaDetalleModel  # noqa: F401
+# Registrar todos los modelos al inicio
+register_all_models()
 
 # Inicializar Faker para español
 fake = Faker('es_ES')
 
-# Database fixtures for integration tests
+# Database configuration for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
+
+# ==================== Database Fixtures ====================
 
 @pytest.fixture
 def event_loop():
@@ -40,63 +44,42 @@ def event_loop():
 
 
 @pytest.fixture
-async def test_db_manager():
-    """Crea un DatabaseManager para pruebas usando una base de datos en memoria."""
-
-    # Creamos una clase que hereda de DatabaseManager para tests
-    class TestDatabaseManager(DatabaseManager):
-        def __new__(cls):
-            # Aseguramos que siempre se cree una nueva instancia para tests
-            return super(DatabaseManager, cls).__new__(cls)
-
-        def __init__(self):
-            # Configuramos la base de datos en memoria para tests
-            self._engine = create_async_engine(
-                TEST_DATABASE_URL, echo=False, future=True
-            )
-
-            # Session factory para tests
-            self._session_factory = async_sessionmaker(
-                self._engine,
-                class_=AsyncSession,
-                expire_on_commit=False,
-                autocommit=False,
-                autoflush=False,
-            )
-
-            self._initialized = True
-
-    # Creamos una instancia del manejador de BD para tests
-    test_db = TestDatabaseManager()
-
-    # Importamos los modelos para registrarlos con Base
-    # from src.models.auth.rol_model import RolModel  # noqa: F401  # ELIMINADO: Ya no existe RolModel
-    from src.models.pagos.division_cuenta_model import DivisionCuentaModel  # noqa: F401
-    from src.models.pagos.division_cuenta_detalle_model import DivisionCuentaDetalleModel  # noqa: F401
-    from src.models.auth.usuario_model import UsuarioModel  # noqa: F401
-    from src.models.mesas.mesa_model import MesaModel  # noqa: F401
-    from src.models.mesas.local_model import LocalModel  # noqa: F401
-    from src.models.mesas.zona_model import ZonaModel  # noqa: F401
-    from src.models.mesas.sesion_mesa_model import SesionMesaModel  # noqa: F401
-    from src.models.mesas.usuario_sesion_mesa_model import UsuarioSesionMesaModel  # noqa: F401
-
-    # Creamos las tablas
-    async with test_db.engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+async def test_engine():
+    """Crea un motor de base de datos para tests en memoria."""
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        echo=False,
+        future=True,
+    )
+    
+    # Crear todas las tablas
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    yield test_db
-
-    # Limpiamos después de los tests
-    async with test_db.engine.begin() as conn:
+    
+    yield engine
+    
+    # Limpiar
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    await test_db.close()
+    await engine.dispose()
 
 
 @pytest.fixture
-async def db_session(test_db_manager):
+async def test_session_factory(test_engine):
+    """Crea una factoría de sesiones para tests."""
+    return async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
+
+@pytest.fixture
+async def db_session(test_session_factory):
     """Crea una sesión de base de datos para pruebas de integración."""
-    async with test_db_manager.session() as session:
+    async with test_session_factory() as session:
         yield session
         await session.rollback()
 
@@ -104,13 +87,8 @@ async def db_session(test_db_manager):
 @pytest.fixture
 async def override_get_db(db_session):
     """Proporciona una dependencia de DB para inyección."""
-
     async def _get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
+        yield db_session
     return _get_db
 
 
@@ -178,29 +156,11 @@ def cleanup_app():
     app.dependency_overrides = {}
 
 
-# ============================================================================
-# FAKE DATA GENERATORS - Para crear datos de prueba reutilizables
-# ============================================================================
-
-# FIXTURE ELIMINADA: fake_rol_data
-# Ya no existe RolModel en el sistema
-# @pytest.fixture
-# def fake_rol_data():
-#     ...
-
+# ==================== Fake Data Generators ====================
 
 @pytest.fixture
 def fake_usuario_data():
-    """
-    Genera datos fake para un Usuario (simplificado).
-
-    Returns:
-        dict: Datos de usuario con valores fake realistas
-
-    Uso:
-        def test_ejemplo(fake_usuario_data):
-            usuario = UsuarioModel(**fake_usuario_data)
-    """
+    """Genera datos fake para un Usuario."""
     return {
         "id": str(ULID()),
         "email": fake.email(),
@@ -211,12 +171,7 @@ def fake_usuario_data():
 
 @pytest.fixture
 def fake_categoria_data():
-    """
-    Genera datos fake para una Categoría.
-    
-    Returns:
-        dict: Datos de categoría con valores fake realistas
-    """
+    """Genera datos fake para una Categoría."""
     return {
         "id": str(ULID()),
         "nombre": fake.word().capitalize()[:50],
@@ -228,12 +183,7 @@ def fake_categoria_data():
 
 @pytest.fixture
 def fake_producto_data(fake_categoria_data):
-    """
-    Genera datos fake para un Producto.
-    
-    Returns:
-        dict: Datos de producto con valores fake realistas
-    """
+    """Genera datos fake para un Producto."""
     return {
         "id": str(ULID()),
         "id_categoria": fake_categoria_data["id"],
@@ -251,12 +201,7 @@ def fake_producto_data(fake_categoria_data):
 
 @pytest.fixture
 def fake_alergeno_data():
-    """
-    Genera datos fake para un Alérgeno.
-    
-    Returns:
-        dict: Datos de alérgeno con valores fake realistas
-    """
+    """Genera datos fake para un Alérgeno."""
     alergenos = [
         "Gluten", "Crustáceos", "Huevos", "Pescado", "Cacahuetes",
         "Soja", "Lácteos", "Frutos secos", "Apio", "Mostaza",
@@ -273,12 +218,7 @@ def fake_alergeno_data():
 
 @pytest.fixture
 def fake_producto_alergeno_data(fake_producto_data, fake_alergeno_data):
-    """
-    Genera datos fake para una relación Producto-Alérgeno.
-    
-    Returns:
-        dict: Datos de producto-alérgeno con valores fake realistas
-    """
+    """Genera datos fake para una relación Producto-Alérgeno."""
     from src.core.enums.alergeno_enums import NivelPresencia
     
     return {
@@ -290,23 +230,11 @@ def fake_producto_alergeno_data(fake_producto_data, fake_alergeno_data):
     }
 
 
-# ============================================================================
-# FAKE DATA FACTORIES - Para crear múltiples instancias
-# ============================================================================
+# ==================== Fake Data Factories ====================
 
 @pytest.fixture
 def create_fake_rol():
-    """
-    Factory para crear múltiples roles fake.
-    
-    Returns:
-        callable: Función que genera datos de rol
-    
-    Uso:
-        def test_ejemplo(create_fake_rol):
-            rol1 = create_fake_rol()
-            rol2 = create_fake_rol(nombre="Admin")
-    """
+    """Factory para crear múltiples roles fake."""
     def _create_fake_rol(**kwargs):
         data = {
             "id": str(ULID()),
@@ -316,23 +244,12 @@ def create_fake_rol():
         }
         data.update(kwargs)
         return data
-    
     return _create_fake_rol
 
 
 @pytest.fixture
 def create_fake_usuario():
-    """
-    Factory para crear múltiples usuarios fake.
-    
-    Returns:
-        callable: Función que genera datos de usuario
-    
-    Uso:
-        def test_ejemplo(create_fake_usuario):
-            user1 = create_fake_usuario()
-            user2 = create_fake_usuario(email="custom@test.com")
-    """
+    """Factory para crear múltiples usuarios fake."""
     def _create_fake_usuario(**kwargs):
         data = {
             "id": str(ULID()),
@@ -346,7 +263,6 @@ def create_fake_usuario():
         }
         data.update(kwargs)
         return data
-    
     return _create_fake_usuario
 
 

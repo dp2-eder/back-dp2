@@ -89,8 +89,8 @@ async def test_get_nombre_rol_usuario_not_found_integration(async_client, db_ses
     # Assert
     assert response.status_code == 404
     response_data = response.json()
-    assert "detail" in response_data
-    assert "No se encontró el usuario" in response_data["detail"]
+    assert "error" in response_data
+    assert "No se encontró el usuario" in response_data["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -129,5 +129,5 @@ async def test_get_nombre_rol_usuario_sin_rol_integration(async_client, db_sessi
     # Assert
     assert response.status_code == 404
     response_data = response.json()
-    assert "detail" in response_data
-    assert "no tiene un rol asignado" in response_data["detail"]
+    assert "error" in response_data
+    assert "no tiene un rol asignado" in response_data["error"]["message"]

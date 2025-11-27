@@ -45,6 +45,7 @@ class RolModel(BaseModel, AuditMixin):
     nombre: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     descripcion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    es_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     # Métodos comunes para todos los modelos
     def to_dict(self) -> Dict[str, Any]:

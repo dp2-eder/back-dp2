@@ -99,6 +99,19 @@ class RolRepository:
         result = await self.session.execute(query)
         return result.scalars().first()
 
+    async def get_default(self) -> Optional[RolModel]:
+        """
+        Obtiene el rol marcado como por defecto en el sistema.
+
+        Returns
+        -------
+        Optional[RolModel]
+            El rol por defecto o None si no existe.
+        """
+        query = select(RolModel).where(RolModel.es_default == True)
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
     async def delete(self, rol_id: str) -> bool:
         """
         Elimina un rol de la base de datos por su ID.

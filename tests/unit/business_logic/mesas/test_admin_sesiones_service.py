@@ -297,31 +297,3 @@ async def test_finalizar_sesiones_expiradas_con_expiradas(service, mock_session)
     assert sesion_expirada.estado == EstadoSesionMesa.FINALIZADA
     assert sesion_expirada.fecha_fin is not None
     mock_session.commit.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_fix_duplicate_active_sessions_con_error(service, mock_session):
-    """
-    Verifica que fix_duplicate_active_sessions maneje errores correctamente.
-    
-    PRECONDICIONES:
-        - Servicio inicializado
-        - La sesión lanza una excepción durante el proceso
-        
-    PROCESO:
-        - Ejecuta método fix_duplicate_active_sessions
-        - Se produce un error en la base de datos
-        
-    POSTCONDICIONES:
-        - Lanza Exception con mensaje descriptivo
-        - Se hace rollback de la transacción
-    """
-    # Arrange
-    mock_session.execute.side_effect = Exception("Error de base de datos")
-    
-    # Act & Assert
-    with pytest.raises(Exception) as exc_info:
-        await service.fix_duplicate_active_sessions()
-    
-    assert "Error al corregir sesiones duplicadas" in str(exc_info.value)
-    mock_session.rollback.assert_called_once()

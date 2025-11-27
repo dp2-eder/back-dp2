@@ -4,7 +4,8 @@ Endpoints para gestión de categorías.
 
 from typing import Optional
 from src.business_logic.menu.categoria_service import CategoriaService
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from src.business_logic.menu.imagen_service import ImagenService
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_database_session
@@ -13,7 +14,8 @@ from src.api.schemas.categoria_schema import (
     CategoriaResponse,
     CategoriaUpdate,
     CategoriaList,
-    CategoriaConProductosCardList
+    CategoriaConProductosCardList,
+    CategoriaImagenResponse
 )
 from src.business_logic.exceptions.categoria_exceptions import (
     CategoriaValidationError,
@@ -23,42 +25,6 @@ from src.business_logic.exceptions.categoria_exceptions import (
 from src.core.auth_dependencies import get_current_admin
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
-
-@router.post(
-    "",
-    response_model=CategoriaResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Crear una nueva categoría",
-    description="Crea una nueva categoría en el sistema con los datos proporcionados.",
-)
-async def create_categoria(
-    categoria_data: CategoriaCreate, session: AsyncSession = Depends(get_database_session)
-) -> CategoriaResponse:
-    """
-    Crea una nueva categoría en el sistema.
-
-    Args:
-        categoria_data: Datos de la categoría a crear.
-        session: Sesión de base de datos.
-
-    Returns:
-        La categoría creada con todos sus datos.
-
-    Raises:
-        HTTPException:
-            - 409: Si ya existe una categoría con el mismo nombre.
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        categoria_service = CategoriaService(session)
-        return await categoria_service.create_categoria(categoria_data)
-    except CategoriaConflictError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
 
 
 @router.get(
@@ -118,120 +84,6 @@ async def list_categorias(
 
 
 @router.get(
-    "/{categoria_id}",
-    response_model=CategoriaResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Obtener una categoría por ID",
-    description="Obtiene los detalles de una categoría específica por su ID.",
-)
-async def get_categoria(
-    categoria_id: str, session: AsyncSession = Depends(get_database_session)
-) -> CategoriaResponse:
-    """
-    Obtiene una categoría específica por su ID.
-
-    Args:
-        categoria_id: ID de la categoría a buscar.
-        session: Sesión de base de datos.
-
-    Returns:
-        La categoría encontrada con todos sus datos.
-
-    Raises:
-        HTTPException:
-            - 404: Si no se encuentra la categoría.
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        categoria_service = CategoriaService(session)
-        return await categoria_service.get_categoria_by_id(categoria_id)
-    except CategoriaNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
-
-
-@router.put(
-    "/{categoria_id}",
-    response_model=CategoriaResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Actualizar una categoría",
-    description="Actualiza los datos de una categoría existente.",
-)
-async def update_categoria(
-    categoria_id: str,
-    categoria_data: CategoriaUpdate,
-    session: AsyncSession = Depends(get_database_session),
-) -> CategoriaResponse:
-    """
-    Actualiza una categoría existente.
-
-    Args:
-        categoria_id: ID de la categoría a actualizar.
-        categoria_data: Datos de la categoría a actualizar.
-        session: Sesión de base de datos.
-
-    Returns:
-        La categoría actualizada con todos sus datos.
-
-    Raises:
-        HTTPException:
-            - 404: Si no se encuentra la categoría.
-            - 409: Si hay un conflicto (e.g., nombre duplicado).
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        categoria_service = CategoriaService(session)
-        return await categoria_service.update_categoria(categoria_id, categoria_data)
-    except CategoriaNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except CategoriaConflictError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
-
-
-@router.delete(
-    "/{categoria_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Eliminar una categoría",
-    description="Elimina una categoría existente del sistema.",
-)
-async def delete_categoria(
-    categoria_id: str, session: AsyncSession = Depends(get_database_session)
-) -> None:
-    """
-    Elimina una categoría existente.
-
-    Args:
-        categoria_id: ID de la categoría a eliminar.
-        session: Sesión de base de datos.
-
-    Raises:
-        HTTPException:
-            - 404: Si no se encuentra la categoría.
-            - 500: Si ocurre un error interno del servidor.
-    """
-    try:
-        categoria_service = CategoriaService(session)
-        result = await categoria_service.delete_categoria(categoria_id)
-        # No es necesario verificar el resultado aquí ya que delete_categoria
-        # lanza CategoriaNotFoundError si no encuentra la categoría
-    except CategoriaNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno del servidor: {str(e)}",
-        )
-
-@router.get(
     "/productos/cards",
     response_model=CategoriaConProductosCardList,
     status_code=status.HTTP_200_OK,
@@ -252,6 +104,108 @@ async def get_categorias_con_productos_cards(
     try:
         categoria_service = CategoriaService(session)
         return await categoria_service.get_categorias_con_productos_cards(skip, limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+
+@router.post("/{categoria_id}/imagen", response_model=CategoriaImagenResponse)
+async def upload_categoria_imagen(
+    categoria_id: str,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_database_session),
+    _: str = Depends(get_current_admin),
+) -> CategoriaImagenResponse:
+    """
+    Sube una imagen para una categoría.
+    
+    Formatos permitidos: JPG, PNG, WEBP.
+    Tamaño máximo: 5MB.
+    La imagen se convertirá automáticamente a JPG y se redimensionará si es necesario.
+    """
+    try:
+        service = CategoriaService(session)
+        await service.get_categoria_by_id(categoria_id)
+        imagen_path = await ImagenService.save_categoria_image(categoria_id, file)
+        await service.update_categoria(
+            categoria_id=categoria_id, 
+            categoria_data=CategoriaUpdate(imagen_path=imagen_path)
+        )
+
+        return CategoriaImagenResponse(
+            message="Imagen subida exitosamente",
+            categoria_id=categoria_id,
+            imagen_path=imagen_path,
+            filename=file.filename,
+        )
+    except CategoriaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        # Si es HTTPException, relanzarla
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al subir imagen: {str(e)}",
+        )
+
+
+@router.put("/{categoria_id}", response_model=CategoriaResponse)
+async def update_categoria(
+    categoria_id: str,
+    categoria_data: CategoriaUpdate,
+    session: AsyncSession = Depends(get_database_session),
+    _: str = Depends(get_current_admin),
+) -> CategoriaResponse:
+    """
+    Actualiza una categoría existente.
+    """
+    try:
+        service = CategoriaService(session)
+        return await service.update_categoria(categoria_id, categoria_data)
+    except CategoriaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except CategoriaConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+@router.get(
+    "/{categoria_id}",
+    response_model=CategoriaResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener categoría por ID",
+    description="Obtiene los detalles de una categoría específica por su ID.",
+)
+async def get_categoria_by_id(
+    categoria_id: str,
+    session: AsyncSession = Depends(get_database_session),
+) -> CategoriaResponse:
+    """
+    Obtiene los detalles de una categoría específica por su ID.
+
+    Args:
+        categoria_id: ID de la categoría a obtener.
+        session: Sesión de base de datos.
+
+    Returns:
+        Detalles de la categoría solicitada.
+
+    Raises:
+        HTTPException:
+            - 404: Si la categoría no existe.
+            - 500: Si ocurre un error interno del servidor.
+    """
+    try:
+        categoria_service = CategoriaService(session)
+        return await categoria_service.get_categoria_by_id(categoria_id)
+    except CategoriaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -3,7 +3,7 @@ Servicio para la gestión de usuarios y autenticación en el sistema.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from datetime import datetime, timedelta
 
 from src.repositories.auth.usuario_repository import UsuarioRepository
@@ -222,60 +222,53 @@ class UsuarioService:
         UsuarioConflictError
             Si ya existe un usuario con el mismo email.
         """
-        # Validar que el email no esté vacío
-        if not register_data.email:
-            raise UsuarioValidationError("El email es requerido")
-
-        # Validar que el rol existe
-        if register_data.id_rol:
-            rol = await self.rol_repository.get_by_id(register_data.id_rol)
-            if not rol:
-                raise UsuarioValidationError(
-                    f"El rol con ID '{register_data.id_rol}' no existe"
-                )
+                # 1. Resolver ID del Rol
+        id_rol = register_data.id_rol
+        if id_rol:
+            if not await self.rol_repository.get_by_id(id_rol):
+                raise UsuarioValidationError(f"El rol con ID '{id_rol}' no existe")
         else:
-            # Asignar rol COMENSAL por defecto
-            rol_comensal = await self.rol_repository.get_by_nombre("COMENSAL")
-            if not rol_comensal:
-                raise UsuarioValidationError(
-                    "El rol por defecto 'COMENSAL' no existe en el sistema"
-                )
-            register_data.id_rol = rol_comensal.id
+            rol_default = await self.rol_repository.get_default()
+            if not rol_default:
+                raise UsuarioValidationError("No existe un rol por defecto configurado en el sistema")
+            id_rol = rol_default.id
 
-        # Verificar si ya existe un usuario con ese email
-        existing_usuario = await self.repository.get_by_email(register_data.email)
-        if existing_usuario:
-            raise UsuarioConflictError(
-                f"Ya existe un usuario con el email '{register_data.email}'"
-            )
+        # 2. Verificar existencia previa (Optimización UX)
+        if not register_data.email:
+             raise UsuarioValidationError("El email es requerido")
+             
+        if await self.repository.get_by_email(register_data.email):
+            raise UsuarioConflictError(f"Ya existe un usuario con el email '{register_data.email}'")
 
-        # Hash de la contraseña
+        # 3. Preparar modelo
         password_hash = security.get_password_hash(register_data.password)
+        
+        usuario = UsuarioModel(
+            email=register_data.email,
+            password_hash=password_hash,
+            nombre=register_data.nombre,
+            telefono=register_data.telefono,
+            id_rol=id_rol,
+        )
 
         try:
-            # Crear modelo de usuario desde los datos
-            usuario = UsuarioModel(
-                email=register_data.email,
-                password_hash=password_hash,
-                nombre=register_data.nombre,
-                telefono=register_data.telefono,
-                id_rol=register_data.id_rol,
-            )
-
-            # Persistir en la base de datos
+            # 4. Persistir y confirmar transacción
             created_usuario = await self.repository.create(usuario)
-
-            # Convertir y retornar como esquema de respuesta
-            usuario_response = UsuarioResponse.model_validate(created_usuario)
+            await self.repository.session.commit()
+            await self.repository.session.refresh(created_usuario)
 
             return RegisterResponse(
                 status=201,
                 code="SUCCESS",
-                usuario=usuario_response,
+                usuario=UsuarioResponse.model_validate(created_usuario),
                 message="Usuario registrado exitosamente",
             )
-        except IntegrityError as e:
-            raise UsuarioConflictError(f"Error al crear el usuario: {str(e)}")
+        except IntegrityError:
+            await self.repository.session.rollback()
+            raise UsuarioConflictError(f"Ya existe un usuario con el email '{register_data.email}'")
+        except SQLAlchemyError as e:
+            await self.repository.session.rollback()
+            raise UsuarioValidationError(f"Error al registrar usuario: {str(e)}")
 
     async def refresh_token(self, refresh_data: RefreshTokenRequest) -> RefreshTokenResponse:
         """
@@ -361,132 +354,3 @@ class UsuarioService:
 
         # Convertir y retornar como esquema de respuesta
         return UsuarioResponse.model_validate(usuario)
-
-    async def get_usuarios(self, skip: int = 0, limit: int = 100) -> list[UsuarioSummary]:
-        """
-        Obtiene una lista paginada de usuarios.
-
-        Parameters
-        ----------
-        skip : int, optional
-            Número de registros a omitir (offset), por defecto 0.
-        limit : int, optional
-            Número máximo de registros a retornar, por defecto 100.
-
-        Returns
-        -------
-        list[UsuarioSummary]
-            Lista de usuarios resumidos.
-        """
-        # Validar parámetros de entrada
-        if skip < 0:
-            raise UsuarioValidationError(
-                "El parámetro 'skip' debe ser mayor o igual a cero"
-            )
-        if limit < 1:
-            raise UsuarioValidationError("El parámetro 'limit' debe ser mayor a cero")
-
-        # Obtener usuarios desde el repositorio
-        usuarios, total = await self.repository.get_all(skip, limit)
-
-        # Convertir modelos a esquemas de resumen
-        usuario_summaries = [UsuarioSummary.model_validate(usuario) for usuario in usuarios]
-
-        return usuario_summaries
-
-    async def update_usuario(
-        self, usuario_id: str, usuario_data: UsuarioUpdate
-    ) -> UsuarioResponse:
-        """
-        Actualiza un usuario existente.
-
-        Parameters
-        ----------
-        usuario_id : str
-            Identificador único del usuario a actualizar (ULID).
-        usuario_data : UsuarioUpdate
-            Datos para actualizar el usuario.
-
-        Returns
-        -------
-        UsuarioResponse
-            Esquema de respuesta con los datos del usuario actualizado.
-
-        Raises
-        ------
-        UsuarioNotFoundError
-            Si no se encuentra un usuario con el ID proporcionado.
-        UsuarioValidationError
-            Si el rol especificado no existe o el email ya está en uso.
-        UsuarioConflictError
-            Si hay un conflicto al actualizar el usuario.
-        """
-        # Convertir el esquema de actualización a un diccionario,
-        # excluyendo valores None (campos no proporcionados para actualizar)
-        update_data = usuario_data.model_dump(exclude_none=True)
-
-        # Si se actualiza la contraseña, hacer hash
-        if "password" in update_data:
-            update_data["password_hash"] = security.get_password_hash(update_data["password"])
-            del update_data["password"]
-
-        if not update_data:
-            # Si no hay datos para actualizar, simplemente retornar el usuario actual
-            return await self.get_usuario_by_id(usuario_id)
-
-        # Validar id_rol si se proporciona
-        if "id_rol" in update_data:
-            rol = await self.rol_repository.get_by_id(update_data["id_rol"])
-            if not rol:
-                raise UsuarioValidationError(
-                    f"El rol con ID '{update_data['id_rol']}' no existe"
-                )
-
-        # Validar email si se proporciona
-        if "email" in update_data:
-            existing_usuario = await self.repository.get_by_email(update_data["email"])
-            if existing_usuario and existing_usuario.id != usuario_id:
-                raise UsuarioConflictError(
-                    f"Ya existe un usuario con el email '{update_data['email']}'"
-                )
-
-        try:
-            # Actualizar el usuario
-            updated_usuario = await self.repository.update(usuario_id, **update_data)
-
-            # Verificar si el usuario fue encontrado
-            if not updated_usuario:
-                raise UsuarioNotFoundError(f"No se encontró el usuario con ID {usuario_id}")
-
-            # Convertir y retornar como esquema de respuesta
-            return UsuarioResponse.model_validate(updated_usuario)
-        except IntegrityError as e:
-            raise UsuarioConflictError(f"Error al actualizar el usuario: {str(e)}")
-
-    async def delete_usuario(self, usuario_id: str) -> bool:
-        """
-        Elimina un usuario por su ID.
-
-        Parameters
-        ----------
-        usuario_id : str
-            Identificador único del usuario a eliminar (ULID).
-
-        Returns
-        -------
-        bool
-            True si el usuario fue eliminado correctamente.
-
-        Raises
-        ------
-        UsuarioNotFoundError
-            Si no se encuentra un usuario con el ID proporcionado.
-        """
-        # Verificar primero si el usuario existe
-        usuario = await self.repository.get_by_id(usuario_id)
-        if not usuario:
-            raise UsuarioNotFoundError(f"No se encontró el usuario con ID {usuario_id}")
-
-        # Eliminar el usuario
-        result = await self.repository.delete(usuario_id)
-        return result
