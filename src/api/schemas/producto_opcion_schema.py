@@ -18,8 +18,7 @@ class ProductoOpcionBase(BaseModel):
     )
     precio_adicional: Decimal = Field(
         default=Decimal("0.00"),
-        description="Additional price for this option",
-        ge=0
+        description="Additional price for this option (can be negative for discounts)"
     )
     activo: bool = Field(
         default=True,
@@ -50,8 +49,7 @@ class ProductoOpcionUpdate(BaseModel):
     )
     precio_adicional: Optional[Decimal] = Field(
         default=None,
-        description="Additional price for this option",
-        ge=0
+        description="Additional price for this option (can be negative for discounts)"
     )
     activo: Optional[bool] = Field(
         default=None,

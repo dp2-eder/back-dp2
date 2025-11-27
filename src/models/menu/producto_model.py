@@ -15,6 +15,9 @@ from src.models.mixins.audit_mixin import AuditMixin
 if TYPE_CHECKING:
     from src.models.menu.categoria_model import CategoriaModel
     from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
+    from src.models.menu.alergeno_model import AlergenoModel
+    from src.models.menu.producto_alergeno_model import ProductoAlergenoModel
+    from src.models.pedidos.tipo_opciones_model import TipoOpcionModel
 
 # Definimos un TypeVar para el tipado genérico
 T = TypeVar("T", bound="ProductoModel")
@@ -94,6 +97,34 @@ class ProductoModel(BaseModel, AuditMixin):
         back_populates="producto",
         lazy="selectin",
         cascade="all, delete-orphan"
+    )
+
+    # Relación many-to-many con Alergenos a través de la tabla intermedia
+    # Esta es la relación con la tabla intermedia (para acceder a nivel_presencia, notas, etc)
+    productos_alergenos: Mapped[List["ProductoAlergenoModel"]] = relationship(
+        "ProductoAlergenoModel",
+        back_populates="producto",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        foreign_keys="ProductoAlergenoModel.id_producto"
+    )
+
+    # Relación directa many-to-many con Alergenos (acceso directo sin tabla intermedia)
+    # Útil cuando solo necesitas los alérgenos sin metadatos adicionales
+    alergenos: Mapped[List["AlergenoModel"]] = relationship(
+        "AlergenoModel",
+        secondary="productos_alergenos",
+        back_populates="productos",
+        lazy="selectin",
+        viewonly=True  # Solo lectura, modificar vía productos_alergenos
+    )
+
+    tipos_opciones: Mapped[List["TipoOpcionModel"]] = relationship(
+        "TipoOpcionModel",
+        secondary="productos_opciones",
+        back_populates="productos",
+        lazy="selectin",
+        viewonly=True
     )
 
     # Índices adicionales

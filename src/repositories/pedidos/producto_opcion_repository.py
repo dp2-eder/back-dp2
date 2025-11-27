@@ -202,66 +202,115 @@ class ProductoOpcionRepository:
             # porque no estamos modificando datos
             raise
 
-    async def get_by_producto(
-        self,
-        id_producto: str,
-        solo_activos: bool = True
-    ) -> List[ProductoOpcionModel]:
+    async def create_batch(self, producto_opciones: List[ProductoOpcionModel]) -> List[ProductoOpcionModel]:
         """
-        Obtiene todas las opciones de un producto específico.
+        Crea múltiples opciones de productos en la base de datos en una sola operación.
+
+        Parameters
+        ----------
+        producto_opciones : List[ProductoOpcionModel]
+            Lista de instancias del modelo de opción de producto a crear.
+
+        Returns
+        -------
+        List[ProductoOpcionModel]
+            Lista de modelos de opción de producto creados con sus IDs asignados.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            self.session.add_all(producto_opciones)
+            await self.session.flush()
+            # Commit será manejado por el servicio
+            for opcion in producto_opciones:
+                await self.session.refresh(opcion)
+            return producto_opciones
+        except SQLAlchemyError:
+            raise
+    
+    async def delete_batch(self, producto_opcion_ids: List[str]) -> int:
+        """
+        Elimina múltiples opciones de productos de la base de datos por sus IDs.
+
+        Parameters
+        ----------
+        producto_opcion_ids : List[str]
+            Lista de identificadores únicos de las opciones de productos a eliminar.
+
+        Returns
+        -------
+        int
+            Número de opciones de productos eliminadas.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            stmt = delete(ProductoOpcionModel).where(ProductoOpcionModel.id.in_(producto_opcion_ids))
+            result = await self.session.execute(stmt)
+            await self.session.commit()
+            return result.rowcount
+        except SQLAlchemyError:
+            await self.session.rollback()
+            raise
+
+    async def exists_batch(self, producto_opcion_ids: List[str]) -> List[str]:
+        """
+        Verifica la existencia de múltiples opciones de productos por sus IDs.
+
+        Parameters
+        ----------
+        producto_opcion_ids : List[str]
+            Lista de identificadores únicos de las opciones de productos a verificar.
+
+        Returns
+        -------
+        List[str]
+            Lista de IDs que existen en la base de datos.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
+        """
+        try:
+            query = select(ProductoOpcionModel.id).where(ProductoOpcionModel.id.in_(producto_opcion_ids))
+            result = await self.session.execute(query)
+            existing_ids = result.scalars().all()
+            return list(existing_ids)
+        except SQLAlchemyError:
+            raise
+
+    async def delete_by_producto(self, id_producto: str) -> int:
+        """
+        Elimina todas las opciones de un producto.
 
         Parameters
         ----------
         id_producto : str
             Identificador único del producto.
-        solo_activos : bool, optional
-            Si True, solo retorna opciones activas. Por defecto True.
 
         Returns
         -------
-        List[ProductoOpcionModel]
-            Lista de opciones del producto.
+        int
+            Número de opciones eliminadas.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Si ocurre un error durante la operación en la base de datos.
         """
-        query = select(ProductoOpcionModel).where(
-            ProductoOpcionModel.id_producto == id_producto
-        )
-
-        if solo_activos:
-            query = query.where(ProductoOpcionModel.activo == True)
-
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-
-    async def get_by_producto_and_tipo(
-        self,
-        id_producto: str,
-        id_tipo_opcion: str,
-        solo_activos: bool = True
-    ) -> List[ProductoOpcionModel]:
-        """
-        Obtiene opciones de un producto filtradas por tipo.
-
-        Parameters
-        ----------
-        id_producto : str
-            Identificador único del producto.
-        id_tipo_opcion : str
-            Identificador del tipo de opción.
-        solo_activos : bool, optional
-            Si True, solo retorna opciones activas. Por defecto True.
-
-        Returns
-        -------
-        List[ProductoOpcionModel]
-            Lista de opciones del producto para ese tipo.
-        """
-        query = select(ProductoOpcionModel).where(
-            ProductoOpcionModel.id_producto == id_producto,
-            ProductoOpcionModel.id_tipo_opcion == id_tipo_opcion
-        )
-
-        if solo_activos:
-            query = query.where(ProductoOpcionModel.activo == True)
-
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
+        try:
+            stmt = delete(ProductoOpcionModel).where(
+                ProductoOpcionModel.id_producto == id_producto
+            )
+            result = await self.session.execute(stmt)
+            # No hacer commit aquí, será manejado por el servicio
+            return result.rowcount
+        except SQLAlchemyError:
+            raise

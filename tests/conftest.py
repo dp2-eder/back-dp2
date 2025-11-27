@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from src.main import app
 from src.core.database import get_database_session as get_db, DatabaseManager
 from src.models.base_model import BaseModel as Base
+from src.models.auth.admin_model import AdminModel
+from src.core.security import security
 
 # Importar TODOS los modelos al inicio para registrarlos con SQLAlchemy
 # Esto es necesario para que los tests unitarios que instancian modelos directamente funcionen
@@ -116,6 +118,32 @@ async def override_get_db(db_session):
 def test_client():
     """Fixture para TestClient de FastAPI"""
     return TestClient(app)
+
+
+@pytest.fixture
+async def test_admin(db_session):
+    """Crea un admin de prueba en la base de datos."""
+    admin = AdminModel(
+        id=str(ULID()),
+        usuario="admin_test",
+        email="admin@test.com",
+        password=security.get_password_hash("testpassword123")
+    )
+    db_session.add(admin)
+    await db_session.commit()
+    await db_session.refresh(admin)
+    return admin
+
+
+@pytest.fixture
+def admin_token(test_admin):
+    """Genera un token JWT válido para el admin de prueba."""
+    token_data = {
+        "sub": test_admin.id,
+        "email": test_admin.email,
+        "usuario": test_admin.usuario
+    }
+    return security.create_access_token(data=token_data)
 
 
 @pytest.fixture

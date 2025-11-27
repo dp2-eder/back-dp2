@@ -13,6 +13,7 @@ from src.models.mixins.audit_mixin import AuditMixin
 
 if TYPE_CHECKING:
     from src.models.pedidos.producto_opcion_model import ProductoOpcionModel
+    from src.models.menu.producto_model import ProductoModel
 
 # Definimos un TypeVar para tipado genérico
 T = TypeVar("T", bound="TipoOpcionModel")
@@ -71,6 +72,14 @@ class TipoOpcionModel(BaseModel, AuditMixin):
         back_populates="tipo_opcion",
         lazy="selectin",
         cascade="all, delete-orphan"
+    )
+
+    productos: Mapped[List["ProductoModel"]] = relationship(
+        "ProductoModel",
+        secondary="productos_opciones",
+        back_populates="tipos_opciones",
+        lazy="selectin",
+        viewonly=True
     )
 
     # Métodos utilitarios

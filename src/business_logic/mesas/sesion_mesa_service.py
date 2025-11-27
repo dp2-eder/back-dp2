@@ -380,12 +380,7 @@ class SesionMesaService:
             )
 
         # Cerrar la sesión
-        from datetime import datetime
-        update_data = {
-            "estado": EstadoSesionMesa.CERRADA,
-            "fecha_fin": datetime.now()
-        }
-        sesion_cerrada = await self.repository.update(sesion_id, update_data)
+        sesion_cerrada = await self.repository.finalizar_sesion(sesion_id)
         if not sesion_cerrada:
             raise SesionMesaNotFoundError(
                 f"No se encontró la sesión de mesa con ID '{sesion_id}'"
