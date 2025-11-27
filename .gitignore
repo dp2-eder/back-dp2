@@ -141,3 +141,6 @@ logs/
 
 .claude
 app/static/
+
+# Private configuration files
+.commit-rules
