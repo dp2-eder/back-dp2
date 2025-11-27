@@ -2,6 +2,7 @@
 Servicio para la gestión de pedidos en el sistema.
 """
 
+import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -56,6 +57,20 @@ from src.business_logic.exceptions.pedido_exceptions import (
 )
 from src.core.enums.pedido_enums import EstadoPedido
 from src.core.enums.sesion_mesa_enums import EstadoSesionMesa
+from src.business_logic.notifications.rabbitmq_service import get_rabbitmq_service
+from src.repositories.menu.categoria_repository import CategoriaRepository
+from src.api.schemas.scrapper_schemas import (
+    PlatoInsertRequest,
+    MesaDomotica,
+    ProductoDomotica,
+    ComprobanteElectronico,
+    TipoDocumentoEnum,
+    TipoComprobanteEnum,
+    MesaEstadoEnum
+)
+
+logger = logging.getLogger(__name__)
+
 
 
 class PedidoService:
@@ -98,6 +113,7 @@ class PedidoService:
         self.pedido_opcion_repository = PedidoOpcionRepository(session)
         self.producto_repository = ProductoRepository(session)
         self.producto_opcion_repository = ProductoOpcionRepository(session)
+        self.categoria_repository = CategoriaRepository(session)
         self.sesion_mesa_repository = SesionMesaRepository(session)
         self.session = session
 
@@ -760,6 +776,70 @@ class PedidoService:
             response_dict = pedido_response.model_dump()
             response_dict["items"] = items_with_opciones_response
 
+            # --- Integración RabbitMQ ---
+            try:
+                rabbitmq_service = await get_rabbitmq_service()
+                if rabbitmq_service.is_connected:
+                    # 1. Construir MesaDomotica
+                    zona_nombre = mesa.zona.nombre if mesa.zona else "SIN ZONA"
+                    mesa_domotica = MesaDomotica(
+                        nombre=mesa.numero,
+                        zona=zona_nombre,
+                        nota=mesa.nota,
+                        estado=MesaEstadoEnum.OCUPADA
+                    )
+
+                    # 2. Construir lista de ProductoDomotica
+                    platos_domotica = []
+                    categoria_cache = {}
+
+                    for item_data in pedido_data.items:
+                        producto = await self.producto_repository.get_by_id(item_data.id_producto)
+                        
+                        if producto:
+                            # Obtener nombre de categoría
+                            cat_nombre = "GENERAL"
+                            if producto.id_categoria in categoria_cache:
+                                cat_nombre = categoria_cache[producto.id_categoria]
+                            else:
+                                categoria = await self.categoria_repository.get_by_id(producto.id_categoria)
+                                if categoria:
+                                    cat_nombre = categoria.nombre
+                                    categoria_cache[producto.id_categoria] = cat_nombre
+                            
+                            plato = ProductoDomotica(
+                                categoria=cat_nombre,
+                                nombre=producto.nombre,
+                                stock=str(item_data.cantidad), # Usamos la cantidad del pedido como "stock" a insertar
+                                precio=str(producto.precio_base)
+                            )
+                            platos_domotica.append(plato)
+
+                    # 3. Construir ComprobanteElectronico (Datos dummy/por defecto por ahora)
+                    comprobante = ComprobanteElectronico(
+                        tipo_documento=TipoDocumentoEnum.DNI,
+                        numero_documento="00000000",
+                        nombres_completos="CLIENTE GENERICO",
+                        direccion="LIMA",
+                        observacion=pedido_data.notas_cliente or "Sin observaciones",
+                        tipo_comprobante=TipoComprobanteEnum.BOLETA
+                    )
+
+                    # 4. Construir PlatoInsertRequest
+                    plato_request = PlatoInsertRequest(
+                        mesa=mesa_domotica,
+                        platos=platos_domotica,
+                        comprobante=comprobante
+                    )
+
+                    # 5. Publicar
+                    await rabbitmq_service.publish_pedido_creado(plato_request.model_dump(mode='json'))
+                else:
+                    logger.warning("RabbitMQ no está conectado. No se envió la notificación de pedido creado.")
+            except Exception as e:
+                logger.error(f"Error al enviar notificación a RabbitMQ: {str(e)}")
+            # ----------------------------
+
             return PedidoCompletoResponse(**response_dict)
 
         except IntegrityError as e:
@@ -977,6 +1057,71 @@ class PedidoService:
                 fecha_entregado=created_pedido.fecha_entregado,
                 productos=productos_detalle,
             )
+
+            # --- Integración RabbitMQ ---
+            try:
+                rabbitmq_service = await get_rabbitmq_service()
+                if rabbitmq_service.is_connected:
+                    # 1. Construir MesaDomotica
+                    # mesa ya fue validada y cargada en paso 2
+                    zona_nombre = mesa.zona.nombre if mesa.zona else "SIN ZONA"
+                    mesa_domotica = MesaDomotica(
+                        nombre=mesa.numero,
+                        zona=zona_nombre,
+                        nota=mesa.nota,
+                        estado=MesaEstadoEnum.OCUPADA
+                    )
+
+                    # 2. Construir lista de ProductoDomotica
+                    platos_domotica = []
+                    categoria_cache = {}
+
+                    for item_data in items_validados:
+                        producto = item_data["producto"]
+                        item = item_data["item"]
+                        
+                        # Obtener nombre de categoría
+                        cat_nombre = "GENERAL"
+                        if producto.id_categoria in categoria_cache:
+                            cat_nombre = categoria_cache[producto.id_categoria]
+                        else:
+                            categoria = await self.categoria_repository.get_by_id(producto.id_categoria)
+                            if categoria:
+                                cat_nombre = categoria.nombre
+                                categoria_cache[producto.id_categoria] = cat_nombre
+                        
+                        plato = ProductoDomotica(
+                            categoria=cat_nombre,
+                            nombre=producto.nombre,
+                            stock=str(item.cantidad),
+                            precio=str(producto.precio_base)
+                        )
+                        platos_domotica.append(plato)
+
+                    # 3. Construir ComprobanteElectronico
+                    comprobante = ComprobanteElectronico(
+                        tipo_documento=TipoDocumentoEnum.DNI,
+                        numero_documento="00000000",
+                        nombres_completos="CLIENTE GENERICO",
+                        direccion="LIMA",
+                        observacion=pedido_data.notas_cliente or "Sin observaciones",
+                        tipo_comprobante=TipoComprobanteEnum.BOLETA
+                    )
+
+                    # 4. Construir PlatoInsertRequest
+                    plato_request = PlatoInsertRequest(
+                        mesa=mesa_domotica,
+                        platos=platos_domotica,
+                        comprobante=comprobante
+                    )
+
+                    # 5. Publicar
+                    await rabbitmq_service.publish_pedido_creado(plato_request.model_dump(mode='json'))
+                else:
+                    logger.warning("RabbitMQ no está conectado. No se envió la notificación de pedido creado.")
+            except Exception as e:
+                logger.error(f"Error al enviar notificación a RabbitMQ: {str(e)}")
+            # ----------------------------
 
             return PedidoEnviarResponse(
                 status=201,
