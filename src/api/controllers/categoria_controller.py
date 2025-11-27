@@ -127,13 +127,8 @@ async def upload_categoria_imagen(
     """
     try:
         service = CategoriaService(session)
-        # Verificar que la categoría existe
         await service.get_categoria_by_id(categoria_id)
-        
-        # Guardar imagen
         imagen_path = await ImagenService.save_categoria_image(categoria_id, file)
-        
-        # Actualizar referencia en la categoría
         await service.update_categoria(
             categoria_id=categoria_id, 
             categoria_data=CategoriaUpdate(imagen_path=imagen_path)
@@ -174,6 +169,43 @@ async def update_categoria(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except CategoriaConflictError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}",
+        )
+
+@router.get(
+    "/{categoria_id}",
+    response_model=CategoriaResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener categoría por ID",
+    description="Obtiene los detalles de una categoría específica por su ID.",
+)
+async def get_categoria_by_id(
+    categoria_id: str,
+    session: AsyncSession = Depends(get_database_session),
+) -> CategoriaResponse:
+    """
+    Obtiene los detalles de una categoría específica por su ID.
+
+    Args:
+        categoria_id: ID de la categoría a obtener.
+        session: Sesión de base de datos.
+
+    Returns:
+        Detalles de la categoría solicitada.
+
+    Raises:
+        HTTPException:
+            - 404: Si la categoría no existe.
+            - 500: Si ocurre un error interno del servidor.
+    """
+    try:
+        categoria_service = CategoriaService(session)
+        return await categoria_service.get_categoria_by_id(categoria_id)
+    except CategoriaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

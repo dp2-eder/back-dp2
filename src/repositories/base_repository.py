@@ -93,6 +93,7 @@ class BaseRepository(Generic[T]):
             await self.session.merge(obj)
             await self.session.flush()
             await self.session.refresh(obj)
+            await self.session.commit()
             return obj
         except SQLAlchemyError as e:
             await self.session.rollback()

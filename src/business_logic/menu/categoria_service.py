@@ -345,7 +345,7 @@ class CategoriaService:
         CategoriaNotFoundError
             Si no se encuentra la categoría con el ID proporcionado.
         """
-        categoria = await self.repository.get_by_id(categoria_id)
+        categoria: CategoriaModel | None = await self.repository.get_by_id(categoria_id)
         if not categoria:
             raise CategoriaNotFoundError(f"No se encontró la categoría con ID {categoria_id}")
         
