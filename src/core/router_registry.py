@@ -9,6 +9,7 @@ import logging
 from typing import List, Tuple
 
 from fastapi import FastAPI, APIRouter
+from src.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ CONTROLLERS: List[Tuple[str, str]] = [
     ("src.api.controllers.admin_controller", "Administrator"),
 ]
 
-API_PREFIX = "/api/v1"
+settings = get_settings()
+API_PREFIX = f"{settings.api_root_path}/v1"
 
 
 def register_routers(app: FastAPI) -> None:

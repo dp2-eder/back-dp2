@@ -87,6 +87,9 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         debug=settings.debug,
         lifespan=lifespan,
+        docs_url=f"{settings.api_root_path}/docs",
+        redoc_url=f"{settings.api_root_path}/redoc",
+        openapi_url=f"{settings.api_root_path}/openapi.json",
     )
 
     _mount_static_files(app)

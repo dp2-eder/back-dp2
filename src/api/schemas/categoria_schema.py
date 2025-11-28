@@ -45,12 +45,6 @@ class CategoriaResponse(CategoriaBase):
 
     id: str = Field(description="Category ID")
     activo: bool = Field(description="Indicates if the category is active")
-    fecha_creacion: Optional[datetime] = Field(
-        default=None, description="Creation timestamp"
-    )
-    fecha_modificacion: Optional[datetime] = Field(
-        default=None, description="Last modification timestamp"
-    )
 
 
 class CategoriaSummary(BaseModel):

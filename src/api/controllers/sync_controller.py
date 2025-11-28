@@ -5,6 +5,7 @@ Este módulo proporciona rutas para recibir datos de sincronización del sistema
 a través del scrapper, y procesarlos para actualizar la base de datos local.
 """
 
+from time import sleep
 from typing import List, Dict, Any, Set, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,11 +90,15 @@ async def sync_platos(
         
         nuevas_categorias = await categoria_service.batch_create_categorias(categorias_crear)
         resultados["categorias_creadas"] = len(nuevas_categorias)
-        
+
+        sleep(3)        
         for cat in nuevas_categorias:
             existing_cat_map[cat.nombre.upper()] = cat
 
         logger.info(f"[SYNC PLATOS] Categorías a crear: {existing_cat_map.keys()}")
+        temp = list(existing_cat_map.keys())
+        for key in temp:
+            existing_cat_map[key.upper()] = existing_cat_map[key]  
 
         categorias_desactivar = [
             existing_cat_map[cat.upper()].id

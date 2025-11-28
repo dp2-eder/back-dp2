@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # Server configuration
     host: str = "0.0.0.0"
     port: int = 8000
+    api_root_path: str = "/api"
 
     # Database
     database_url: str
